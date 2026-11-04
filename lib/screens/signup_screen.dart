@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_utils.dart';
 import 'email_verification_screen.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -29,12 +30,23 @@ class _SignupScreenState extends State<SignupScreen> {
   void _signup() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+    // Passwords are never trimmed: spaces can be part of a valid password.
+    final password = _passwordController.text;
 
     if (name.isEmpty || email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please fill out all fields.'),
+          backgroundColor: AppTheme.dangerRed,
+        ),
+      );
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid email address.'),
           backgroundColor: AppTheme.dangerRed,
         ),
       );
@@ -66,7 +78,7 @@ class _SignupScreenState extends State<SignupScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Signup Error: $e'),
+          content: Text(describeError(e)),
           backgroundColor: AppTheme.dangerRed,
         ),
       );

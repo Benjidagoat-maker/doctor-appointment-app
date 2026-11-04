@@ -1,11 +1,11 @@
 {
-    "name": "doctor_appointment_app",
-    "short_name": "doctor_appointment_app",
+    "name": "Doctor Care",
+    "short_name": "Doctor Care",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0F67FE",
+    "theme_color": "#0F67FE",
+    "description": "Find doctors and book appointments online.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

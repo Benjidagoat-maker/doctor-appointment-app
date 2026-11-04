@@ -1,12 +1,14 @@
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
-import '../services/firestore_service.dart';
+import '../models/doctor_model.dart';
 import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
 import '../services/realtime_db_service.dart';
 import '../services/sql_api_service.dart';
-import '../models/doctor_model.dart';
 import '../theme/app_theme.dart';
-import 'doctor_details_screen.dart';
+import '../utils/app_utils.dart';
 import 'appointments_screen.dart';
+import 'doctor_details_screen.dart';
 import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -21,9 +23,26 @@ class _HomeScreenState extends State<HomeScreen> {
   final _authService = AuthService();
   final _realtimeDb = RealtimeDbService();
   final _sqlService = SqlApiService();
+  final _searchController = TextEditingController();
+
+  // Created once. Creating the stream inside build() would re-subscribe to
+  // Firestore (and flash a spinner) on every keystroke in the search box.
+  late final Stream<List<DoctorModel>> _doctorsStream =
+      _firestoreService.getDoctors();
+
   String _searchQuery = '';
 
-  void _showSqlRecordsSheet(BuildContext context) async {
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _showSqlRecordsSheet(BuildContext context) {
+    // One fetch per opening - not one per rebuild while the sheet is dragged.
+    final recordsFuture = _sqlService
+        .fetchSqlMedicalRecords(_authService.currentUser?.uid ?? 'guest');
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -38,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
           expand: false,
           builder: (_, controller) {
             return FutureBuilder<List<Map<String, dynamic>>>(
-              future: _sqlService.fetchSqlMedicalRecords(_authService.currentUser?.uid ?? 'guest'),
+              future: recordsFuture,
               builder: (context, snapshot) {
                 return Padding(
                   padding: const EdgeInsets.all(20.0),
@@ -58,51 +77,60 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 16),
                       Row(
                         children: [
-                          const Icon(Icons.storage_rounded, color: AppTheme.primaryBlue),
+                          const Icon(Icons.storage_rounded,
+                              color: AppTheme.primaryBlue),
                           const SizedBox(width: 8),
-                          Text(
-                            'SQL Medical Records',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
+                          Text('SQL Medical Records',
+                              style: Theme.of(context).textTheme.titleLarge),
                         ],
                       ),
                       Text(
-                        'Synchronized via REST API (PostgreSQL / MySQL / Cloud SQL)',
+                        _sqlService.isConfigured
+                            ? 'Synchronized via REST API (PostgreSQL / MySQL / Cloud SQL)'
+                            : 'Demo data - no SQL backend is configured yet.',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 16),
                       if (snapshot.connectionState == ConnectionState.waiting)
-                        const Expanded(child: Center(child: CircularProgressIndicator()))
+                        const Expanded(
+                            child: Center(child: CircularProgressIndicator()))
                       else if (!snapshot.hasData || snapshot.data!.isEmpty)
-                        const Expanded(child: Center(child: Text('No medical records found.')))
+                        const Expanded(
+                            child: Center(child: Text('No medical records found.')))
                       else
                         Expanded(
                           child: ListView.separated(
                             controller: controller,
                             itemCount: snapshot.data!.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 12),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 12),
                             itemBuilder: (_, index) {
                               final item = snapshot.data![index];
                               return Card(
                                 child: ListTile(
                                   leading: const CircleAvatar(
                                     backgroundColor: Color(0xFFEFF6FF),
-                                    child: Icon(Icons.folder_shared_outlined, color: AppTheme.primaryBlue),
+                                    child: Icon(Icons.folder_shared_outlined,
+                                        color: AppTheme.primaryBlue),
                                   ),
                                   title: Text(
                                     item['diagnosis'] ?? 'Medical Checkup',
-                                    style: const TextStyle(fontWeight: FontWeight.w600),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600),
                                   ),
                                   subtitle: Text(
-                                    '${item['doctor']} • ${item['date']}\nDB: ${item['source']}',
+                                    '${item['doctor']} • ${item['date']}\n${item['source']}',
                                     style: const TextStyle(fontSize: 12),
                                   ),
                                   trailing: Chip(
                                     label: Text(
                                       item['status'] ?? 'Active',
-                                      style: const TextStyle(fontSize: 11, color: AppTheme.successGreen),
+                                      style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppTheme.successGreen),
                                     ),
-                                    backgroundColor: AppTheme.successGreen.withOpacity(0.1),
+                                    backgroundColor: AppTheme.successGreen
+                                        .withValues(alpha: 0.1),
                                   ),
                                 ),
                               );
@@ -120,19 +148,23 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _signOut() async {
+    final nav = Navigator.of(context);
+    await _authService.signOut();
+    nav.pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Find Your Doctor'),
         actions: [
-          // Button to view SQL Records
           IconButton(
             tooltip: 'View SQL Connected Records',
             icon: const Icon(Icons.storage_outlined),
             onPressed: () => _showSqlRecordsSheet(context),
           ),
-          // Button to view Booked Appointments
           IconButton(
             tooltip: 'My Appointments',
             icon: const Icon(Icons.calendar_month_outlined),
@@ -144,52 +176,55 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             tooltip: 'Sign Out',
             icon: const Icon(Icons.logout_rounded),
-            onPressed: () async {
-              final nav = Navigator.of(context);
-              await _authService.signOut();
-              nav.pushReplacement(
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              );
-            },
+            onPressed: _signOut,
           ),
         ],
       ),
       body: Column(
         children: [
-          // Search & Filter Header
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
             color: Colors.white,
             child: TextField(
-              onChanged: (val) => setState(() => _searchQuery = val.trim().toLowerCase()),
+              controller: _searchController,
+              onChanged: (val) =>
+                  setState(() => _searchQuery = val.trim().toLowerCase()),
               decoration: InputDecoration(
-                hintText: 'Search by doctor name or specialty...',
+                hintText: 'Search by doctor name, specialty or phone...',
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
+                        tooltip: 'Clear',
                         icon: const Icon(Icons.clear),
-                        onPressed: () => setState(() => _searchQuery = ''),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
                       )
                     : null,
               ),
             ),
           ),
-
-          // Doctor List
           Expanded(
             child: StreamBuilder<List<DoctorModel>>(
-              stream: _firestoreService.getDoctors(),
+              stream: _doctorsStream,
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
-                  return Center(child: Text('Error loading doctors: ${snapshot.error}'));
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(describeError(snapshot.error!),
+                          textAlign: TextAlign.center),
+                    ),
+                  );
                 }
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final doctors = snapshot.data ?? [];
-                final filtered = doctors.where((doc) {
+                final filtered = snapshot.data!.where((doc) {
                   return doc.name.toLowerCase().contains(_searchQuery) ||
-                      doc.specialty.toLowerCase().contains(_searchQuery);
+                      doc.specialty.toLowerCase().contains(_searchQuery) ||
+                      doc.phone.toLowerCase().contains(_searchQuery);
                 }).toList();
 
                 if (filtered.isEmpty) {
@@ -197,10 +232,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.search_off_rounded, size: 64, color: Colors.grey.shade400),
+                        Icon(Icons.search_off_rounded,
+                            size: 64, color: Colors.grey.shade400),
                         const SizedBox(height: 12),
                         Text(
-                          _searchQuery.isEmpty ? 'No doctors registered yet.' : 'No matching doctors found.',
+                          _searchQuery.isEmpty
+                              ? 'No doctors registered yet.'
+                              : 'No matching doctors found.',
                           style: const TextStyle(color: AppTheme.textMuted),
                         ),
                       ],
@@ -220,21 +258,22 @@ class _HomeScreenState extends State<HomeScreen> {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => DoctorDetailsScreen(doctor: doc),
-                          ),
+                              builder: (_) => DoctorDetailsScreen(doctor: doc)),
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(16.0),
                           child: Row(
                             children: [
-                              // Avatar with Realtime DB Presence indicator
                               Stack(
                                 children: [
                                   CircleAvatar(
                                     radius: 28,
-                                    backgroundColor: AppTheme.primaryBlue.withOpacity(0.12),
+                                    backgroundColor: AppTheme.primaryBlue
+                                        .withValues(alpha: 0.12),
                                     child: Text(
-                                      doc.name.isNotEmpty ? doc.name[0].toUpperCase() : 'D',
+                                      doc.name.isNotEmpty
+                                          ? doc.name[0].toUpperCase()
+                                          : 'D',
                                       style: const TextStyle(
                                         fontSize: 20,
                                         fontWeight: FontWeight.bold,
@@ -242,30 +281,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                     ),
                                   ),
-                                  // Realtime presence badge from Firebase Realtime Database
                                   Positioned(
                                     bottom: 0,
                                     right: 0,
-                                    child: StreamBuilder(
-                                      stream: _realtimeDb.getDoctorLivePresence(doc.id),
-                                      builder: (context, presenceSnap) {
-                                        bool isLiveOnline = doc.available;
-                                        if (presenceSnap.hasData && presenceSnap.data?.snapshot.value != null) {
-                                          final val = presenceSnap.data!.snapshot.value;
-                                          if (val is Map && val['isOnline'] != null) {
-                                            isLiveOnline = val['isOnline'] == true;
-                                          }
-                                        }
-                                        return Container(
-                                          width: 14,
-                                          height: 14,
-                                          decoration: BoxDecoration(
-                                            color: isLiveOnline ? AppTheme.successGreen : Colors.grey,
-                                            shape: BoxShape.circle,
-                                            border: Border.all(color: Colors.white, width: 2),
-                                          ),
-                                        );
-                                      },
+                                    child: _PresenceDot(
+                                      doctorId: doc.id,
+                                      fallbackOnline: doc.available,
+                                      service: _realtimeDb,
                                     ),
                                   ),
                                 ],
@@ -275,50 +297,49 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      doc.name,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
+                                    Text(doc.name,
+                                        style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w700)),
                                     const SizedBox(height: 4),
-                                    Text(
-                                      doc.specialty,
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        color: AppTheme.primaryBlue,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
+                                    Text(doc.specialty,
+                                        style: const TextStyle(
+                                            fontSize: 13,
+                                            color: AppTheme.primaryBlue,
+                                            fontWeight: FontWeight.w500)),
                                     const SizedBox(height: 4),
                                     Row(
                                       children: [
-                                        const Icon(Icons.phone_outlined, size: 14, color: AppTheme.textMuted),
+                                        const Icon(Icons.phone_outlined,
+                                            size: 14, color: AppTheme.textMuted),
                                         const SizedBox(width: 4),
-                                        Text(
-                                          doc.phone,
-                                          style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                                        ),
+                                        Text(doc.phone,
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color: AppTheme.textMuted)),
                                       ],
                                     ),
                                   ],
                                 ),
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
                                 decoration: BoxDecoration(
-                                  color: doc.available
-                                      ? AppTheme.successGreen.withOpacity(0.12)
-                                      : AppTheme.dangerRed.withOpacity(0.12),
+                                  color: (doc.available
+                                          ? AppTheme.successGreen
+                                          : AppTheme.dangerRed)
+                                      .withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
-                                  doc.available ? 'Available' : 'Booked',
+                                  doc.available ? 'Available' : 'Unavailable',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: doc.available ? AppTheme.successGreen : AppTheme.dangerRed,
+                                    color: doc.available
+                                        ? AppTheme.successGreen
+                                        : AppTheme.dangerRed,
                                   ),
                                 ),
                               ),
@@ -334,6 +355,51 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Live presence badge. Owns its stream so it is subscribed once per card,
+/// not re-created on every parent rebuild (e.g. while typing in search).
+class _PresenceDot extends StatefulWidget {
+  final String doctorId;
+  final bool fallbackOnline;
+  final RealtimeDbService service;
+
+  const _PresenceDot({
+    required this.doctorId,
+    required this.fallbackOnline,
+    required this.service,
+  });
+
+  @override
+  State<_PresenceDot> createState() => _PresenceDotState();
+}
+
+class _PresenceDotState extends State<_PresenceDot> {
+  late final Stream<DatabaseEvent> _stream =
+      widget.service.getDoctorLivePresence(widget.doctorId);
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DatabaseEvent>(
+      stream: _stream,
+      builder: (context, snap) {
+        var online = widget.fallbackOnline;
+        final value = snap.data?.snapshot.value;
+        if (value is Map && value['isOnline'] != null) {
+          online = value['isOnline'] == true;
+        }
+        return Container(
+          width: 14,
+          height: 14,
+          decoration: BoxDecoration(
+            color: online ? AppTheme.successGreen : Colors.grey,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+          ),
+        );
+      },
     );
   }
 }

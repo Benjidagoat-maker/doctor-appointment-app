@@ -1,36 +1,56 @@
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
 
-/// Service managing real-time data using Firebase Realtime Database
-/// Used for real-time doctor live presence, instant queue counter, and real-time alerts.
+/// Real-time data (doctor presence, notifications) via Firebase Realtime
+/// Database. Everything here is optional sugar on top of Firestore, so the
+/// service degrades gracefully when the database isn't configured
+/// (e.g. `databaseURL` missing from firebase_options.dart on web).
 class RealtimeDbService {
-  final FirebaseDatabase _db = FirebaseDatabase.instance;
+  RealtimeDbService({FirebaseDatabase? database}) : _dbOverride = database;
 
-  /// Stream of a doctor's live status / online presence
-  Stream<DatabaseEvent> getDoctorLivePresence(String doctorId) {
-    return _db.ref('doctors_presence/$doctorId').onValue;
+  final FirebaseDatabase? _dbOverride;
+
+  FirebaseDatabase? get _db {
+    try {
+      return _dbOverride ?? FirebaseDatabase.instance;
+    } catch (e) {
+      debugPrint('Realtime Database unavailable: $e');
+      return null;
+    }
   }
 
-  /// Update doctor's live status (online/in consultation/offline)
-  Future<void> updateDoctorPresence(String doctorId, {required bool isOnline, String status = 'Available'}) async {
-    await _db.ref('doctors_presence/$doctorId').set({
+  /// Stream of a doctor's live status / online presence.
+  /// Empty (never errors) when Realtime Database is unavailable.
+  Stream<DatabaseEvent> getDoctorLivePresence(String doctorId) {
+    final db = _db;
+    if (db == null) return const Stream<DatabaseEvent>.empty();
+    return db
+        .ref('doctors_presence/$doctorId')
+        .onValue
+        .handleError((Object e) => debugPrint('Presence stream error: $e'));
+  }
+
+  Future<void> updateDoctorPresence(String doctorId,
+      {required bool isOnline, String status = 'Available'}) async {
+    await _db?.ref('doctors_presence/$doctorId').set({
       'isOnline': isOnline,
       'status': status,
       'lastActive': ServerValue.timestamp,
     });
   }
 
-  /// Stream queue position or live waiting room count
   Stream<DatabaseEvent> getLiveQueueCount(String doctorId) {
-    return _db.ref('waiting_room/$doctorId/count').onValue;
+    final db = _db;
+    if (db == null) return const Stream<DatabaseEvent>.empty();
+    return db.ref('waiting_room/$doctorId/count').onValue;
   }
 
-  /// Push an instant real-time notification
   Future<void> sendRealtimeNotification({
     required String recipientUid,
     required String title,
     required String message,
   }) async {
-    await _db.ref('notifications/$recipientUid').push().set({
+    await _db?.ref('notifications/$recipientUid').push().set({
       'title': title,
       'message': message,
       'timestamp': ServerValue.timestamp,
@@ -38,9 +58,13 @@ class RealtimeDbService {
     });
   }
 
-  /// Listen to real-time notifications for a user
   Stream<DatabaseEvent> getUserNotifications(String uid) {
-    return _db.ref('notifications/$uid').orderByChild('timestamp').limitToLast(10).onValue;
+    final db = _db;
+    if (db == null) return const Stream<DatabaseEvent>.empty();
+    return db
+        .ref('notifications/$uid')
+        .orderByChild('timestamp')
+        .limitToLast(10)
+        .onValue;
   }
 }
-
