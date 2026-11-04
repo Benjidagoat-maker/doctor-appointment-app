@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      // Nobody can self-assign admin: set role manually in the Firebase console.
+      allow create: if signedIn() && request.auth.uid == uid && request.resource.data.role == 'user';
+      allow update: if signedIn() && request.auth.uid == uid
+                    && request.resource.data.role == resource.data.role;
+    }
+
+    match /doctors/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /appointments/{id} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin())
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+    }
+  }
+}
