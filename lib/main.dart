@@ -15,7 +15,7 @@ void main() async {
   await FirebaseAppCheck.instance.activate(
     androidProvider: AndroidProvider.debug,   // change to playIntegrity in prod
     appleProvider: AppleProvider.debug,       // change to deviceCheck in prod
-    webProvider: ReCaptchaEnterpriseProvider('YOUR_RECAPTCHA_SITE_KEY'), // replace with your key
+    webProvider: ReCaptchaEnterpriseProvider('6LcMohAuAAAAANSO0kqvuUvymNd26CZBqlZjL6J2'), // replace with your key
   );
 
   runApp(const MyApp());
