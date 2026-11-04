@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import '../models/doctor_model.dart';
 import '../services/firestore_service.dart';
@@ -6,6 +9,7 @@ import '../services/auth_service.dart';
 import '../services/realtime_db_service.dart';
 import '../services/sql_api_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_utils.dart';
 
 class DoctorDetailsScreen extends StatefulWidget {
   final DoctorModel doctor;
@@ -24,6 +28,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   TimeOfDay _selectedTime = const TimeOfDay(hour: 10, minute: 0);
   bool _isBooking = false;
+  late final Stream<DatabaseEvent> _presenceStream =
+      _realtimeDb.getDoctorLivePresence(widget.doctor.id);
 
   void _pickDate() async {
     final picked = await showDatePicker(
@@ -66,33 +72,38 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     );
 
     try {
-      // 1. Book in Cloud Firestore
+      // 1. The booking itself (Cloud Firestore) is the only critical step.
       await _firestoreService.bookAppointment(
-        user.uid,
-        widget.doctor.id,
-        bookingDateTime,
+        userId: user.uid,
+        doctorId: widget.doctor.id,
+        doctorName: widget.doctor.name,
+        date: bookingDateTime,
       );
 
-      // 2. Send instant Realtime notification to Firebase Realtime Database
-      await _realtimeDb.sendRealtimeNotification(
-        recipientUid: user.uid,
-        title: 'Appointment Booked',
-        message: 'Your visit with ${widget.doctor.name} is confirmed for ${DateFormat.yMMMd().add_jm().format(bookingDateTime)}',
-      );
-
-      // 3. Trigger async SQL sync (Cloud SQL / Postgres / MySQL)
-      _sqlService.syncAppointmentToSql({
+      // 2. Best-effort extras: a failure here must never fail the booking.
+      try {
+        await _realtimeDb.sendRealtimeNotification(
+          recipientUid: user.uid,
+          title: 'Appointment Booked',
+          message:
+              'Your visit with ${widget.doctor.name} is confirmed for ${DateFormat.yMMMd().add_jm().format(bookingDateTime)}',
+        );
+      } catch (e) {
+        debugPrint('Realtime notification skipped: $e');
+      }
+      unawaited(_sqlService.syncAppointmentToSql({
         'userId': user.uid,
         'doctorId': widget.doctor.id,
         'doctorName': widget.doctor.name,
         'date': bookingDateTime.toIso8601String(),
         'status': 'confirmed',
-      });
+      }));
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Appointment confirmed & synced across Firestore, Realtime DB & SQL!'),
+        SnackBar(
+          content: Text(
+              'Appointment booked for ${DateFormat.yMMMd().add_jm().format(bookingDateTime)}.'),
           backgroundColor: AppTheme.successGreen,
         ),
       );
@@ -101,7 +112,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Booking failed: $e'),
+          content: Text(describeError(e)),
           backgroundColor: AppTheme.dangerRed,
         ),
       );
@@ -129,7 +140,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                   children: [
                     CircleAvatar(
                       radius: 36,
-                      backgroundColor: AppTheme.primaryBlue.withOpacity(0.12),
+                      backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.12),
                       child: Text(
                         widget.doctor.name.isNotEmpty ? widget.doctor.name[0].toUpperCase() : 'D',
                         style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
@@ -176,18 +187,26 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                     const Icon(Icons.bolt_rounded, color: AppTheme.successGreen),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: StreamBuilder(
-                        stream: _realtimeDb.getDoctorLivePresence(widget.doctor.id),
+                      child: StreamBuilder<DatabaseEvent>(
+                        stream: _presenceStream,
                         builder: (context, snapshot) {
+                          final value = snapshot.data?.snapshot.value;
+                          final hasLive = value is Map && value['isOnline'] != null;
+                          final online = value is Map && value['isOnline'] == true;
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
+                            children: [
                               Text(
-                                'Firebase Realtime Connected',
-                                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF166534)),
+                                hasLive
+                                    ? (online ? 'Doctor is online now' : 'Doctor is currently offline')
+                                    : 'Live status not available',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    color: Color(0xFF166534)),
                               ),
-                              Text(
-                                'Live doctor status & instant appointment queue active',
+                              const Text(
+                                'You can book a slot regardless of live status',
                                 style: TextStyle(fontSize: 12, color: Color(0xFF15803D)),
                               ),
                             ],

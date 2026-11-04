@@ -10,7 +10,9 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       // Nobody can self-assign admin: set role manually in the Firebase console.
-      allow create: if signedIn() && request.auth.uid == uid && request.resource.data.role == 'user';
+      allow create: if signedIn() && request.auth.uid == uid
+                    && request.resource.data.role == 'user'
+                    && request.resource.data.keys().hasOnly(['name', 'email', 'role']);
       allow update: if signedIn() && request.auth.uid == uid
                     && request.resource.data.role == resource.data.role;
     }
@@ -22,9 +24,25 @@ service cloud.firestore {
 
     match /appointments/{id} {
       allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin())
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+
+      // A patient can only create a *booked* appointment for themselves,
+      // in the future, with exactly the expected fields.
+      allow create: if signedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.status == 'booked'
+                    && request.resource.data.keys().hasOnly(
+                         ['userId', 'doctorId', 'doctorName', 'date', 'status', 'createdAt'])
+                    && request.resource.data.date is timestamp
+                    && request.resource.data.date > request.time;
+
+      // Only `status` may change. Patients can only cancel their own booking;
+      // admins can set either status.
+      allow update: if signedIn()
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+                    && request.resource.data.status in ['booked', 'cancelled']
+                    && (isAdmin()
+                        || (resource.data.userId == request.auth.uid
+                            && request.resource.data.status == 'cancelled'));
     }
   }
 }

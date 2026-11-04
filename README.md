@@ -125,8 +125,12 @@ flutter pub get
 
 ### 3. Run Locally
 ```bash
-# Run in Chrome
+# Run in Chrome (debug builds use the App Check *debug* provider - see checklist below)
 flutter run -d chrome
+
+# Optional config (all have safe defaults)
+#   --dart-define=RECAPTCHA_SITE_KEY=...   reCAPTCHA Enterprise site key (web, release)
+#   --dart-define=SQL_API_URL=https://...  SQL REST backend (otherwise labelled demo data, no network calls)
 
 # Run on Windows Desktop
 flutter run -d windows
@@ -140,6 +144,36 @@ flutter build web
 # Deploy to Firebase Hosting
 firebase deploy --only hosting
 ```
+
+---
+
+## 🔧 Firebase Console checklist (fixes `cloud_firestore/unavailable` / "client is offline")
+
+That login error means the app could not reach Firestore. Check, in this order:
+
+1. **Firestore database exists** - Build → Firestore Database → *Create database*.
+2. **Auth** - Sign-in method → *Email/Password* enabled; Settings → *Authorized domains* contains `localhost` and your hosting domain.
+3. **App Check** - if *Cloud Firestore* shows **Enforced**, every request needs a valid token. For local development either set it to *Unenforced*, or run a debug build, copy the debug token printed in the browser console and add it under App Check → Apps → *Manage debug tokens*. For production, the reCAPTCHA Enterprise key must allow your hosting domain.
+4. **Network** - ad-blockers / VPNs / some proxies block the Firestore stream. The app now auto-falls back to long-polling, but test once in a clean browser profile.
+5. **Rules** - `firebase deploy --only firestore:rules`
+6. **Realtime Database (optional)** - create it, re-run `flutterfire configure` so `databaseURL` is generated, then deploy `database.rules.json`. The app works without it (presence/notifications are skipped).
+7. **First admin** - set `role` to `admin` on your document in the `users` collection (rules forbid self-promotion).
+
+## ✅ Tests & CI
+
+```bash
+flutter analyze
+flutter test
+```
+
+GitHub Actions (`.github/workflows/deploy.yml`) runs analyze + tests on every push/PR to `main` or `master` and deploys to Firebase Hosting only if they pass.
+
+## 🛣️ Next steps
+
+- Prevent two *different* patients booking the same slot (needs a Cloud Function or a `slots` collection - client rules can't see other users' appointments).
+- Firestore rules unit tests with the Firebase Emulator Suite.
+- Authenticate calls to the SQL API with the Firebase ID token.
+- Replace the `com.example.doctor_appointment_app` application id and add a release signing config before publishing to Play Store.
 
 ---
 

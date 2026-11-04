@@ -17,7 +17,8 @@ android/key.properties
 pubspec.lock
 
 # Sensitive – do NOT commit these
-android/app/google-services.json
+# (android/app/google-services.json is public client config, not a secret,
+#  and is required for `flutter build apk` on a fresh clone, so it is committed.)
 ios/Runner/GoogleService-Info.plist
 # firebase_options.dart contains API keys – keep it if you're using it in CI,
 # but make sure your Firebase Security Rules are properly locked down.

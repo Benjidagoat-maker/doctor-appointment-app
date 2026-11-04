@@ -1,12 +1,12 @@
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import '../models/user_model.dart';
 import '../theme/app_theme.dart';
-import 'home_screen.dart';
+import '../utils/app_utils.dart';
 import 'admin_dashboard.dart';
-import 'signup_screen.dart';
 import 'email_verification_screen.dart';
+import 'home_screen.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -29,26 +29,33 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _login() async {
+  void _showError(String message, {Color color = AppTheme.dangerRed}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: color),
+    );
+  }
+
+  Future<void> _login() async {
     final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+    // Passwords are never trimmed: spaces can be part of a valid password.
+    final password = _passwordController.text;
 
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please fill in both email and password.'),
-          backgroundColor: AppTheme.dangerRed,
-        ),
-      );
+      _showError('Please fill in both email and password.');
+      return;
+    }
+    if (!isValidEmail(email)) {
+      _showError('Please enter a valid email address.');
       return;
     }
 
     setState(() => _isLoading = true);
     try {
       final creds = await _auth.login(email, password);
-      UserModel? user = await _auth.getUserData(creds.user!.uid);
+      final profile = await _auth.loadOrCreateProfile(creds.user!);
       if (!mounted) return;
-      final next = user?.role == 'admin' ? const AdminDashboard() : const HomeScreen();
+      final next =
+          profile.role == 'admin' ? const AdminDashboard() : const HomeScreen();
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => next),
@@ -56,48 +63,65 @@ class _LoginScreenState extends State<LoginScreen> {
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       if (e.code == 'email-not-verified') {
-        // Offer to resend verification or go to waiting screen
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Email not verified. Check your inbox or tap to resend.'),
-            backgroundColor: Colors.orange.shade700,
-            action: SnackBarAction(
-              label: 'Resend',
-              textColor: Colors.white,
-              onPressed: () async {
-                // Temporarily re-sign in to resend the email, then sign out again
-                try {
-                  await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
-                  await _auth.resendVerificationEmail();
-                  await _auth.signOut();
-                  if (!mounted) return;
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => EmailVerificationScreen(email: email)),
-                  );
-                } catch (_) {}
-              },
-            ),
-          ),
-        );
+        _showEmailNotVerified(email, password);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.message ?? 'Login failed. Please try again.'),
-            backgroundColor: AppTheme.dangerRed,
-          ),
-        );
+        _showError(describeError(e));
       }
     } catch (e) {
+      // Signed in, but the profile could not be loaded (offline, rules, ...).
+      // Sign out so the user never lands in the wrong role's UI.
+      await _auth.signOut();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Login Failed: $e'),
-          backgroundColor: AppTheme.dangerRed,
-        ),
-      );
+      _showError(describeError(e));
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showEmailNotVerified(String email, String password) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+            'Email not verified. Check your inbox or tap to resend.'),
+        backgroundColor: Colors.orange.shade700,
+        action: SnackBarAction(
+          label: 'Resend',
+          textColor: Colors.white,
+          onPressed: () async {
+            // Temporarily sign in to resend the email, then sign out again.
+            try {
+              await FirebaseAuth.instance
+                  .signInWithEmailAndPassword(email: email, password: password);
+              await _auth.resendVerificationEmail();
+              await _auth.signOut();
+              if (!mounted) return;
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => EmailVerificationScreen(email: email)),
+              );
+            } catch (e) {
+              if (mounted) _showError(describeError(e));
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _forgotPassword() async {
+    final email = _emailController.text.trim();
+    if (!isValidEmail(email)) {
+      _showError('Enter your email above first, then tap "Forgot password?".');
+      return;
+    }
+    try {
+      await _auth.resetPassword(email);
+      if (!mounted) return;
+      _showError('If an account exists for $email, a reset link was sent.',
+          color: AppTheme.successGreen);
+    } catch (e) {
+      if (mounted) _showError(describeError(e));
     }
   }
 
@@ -114,12 +138,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // App Branding Header
                   Center(
                     child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: AppTheme.primaryBlue.withOpacity(0.1),
+                        color: AppTheme.primaryBlue.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -142,8 +165,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 36),
-
-                  // Login Form Card
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(20.0),
@@ -153,6 +174,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           TextField(
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            autofillHints: const [AutofillHints.email],
                             decoration: const InputDecoration(
                               labelText: 'Email Address',
                               prefixIcon: Icon(Icons.email_outlined),
@@ -162,20 +185,34 @@ class _LoginScreenState extends State<LoginScreen> {
                           TextField(
                             controller: _passwordController,
                             obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.done,
+                            autofillHints: const [AutofillHints.password],
+                            onSubmitted: (_) => _isLoading ? null : _login(),
                             decoration: InputDecoration(
                               labelText: 'Password',
                               prefixIcon: const Icon(Icons.lock_outline),
                               suffixIcon: IconButton(
+                                tooltip: _obscurePassword
+                                    ? 'Show password'
+                                    : 'Hide password',
                                 icon: Icon(
-                                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                  _obscurePassword
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
                                 ),
-                                onPressed: () {
-                                  setState(() => _obscurePassword = !_obscurePassword);
-                                },
+                                onPressed: () => setState(
+                                    () => _obscurePassword = !_obscurePassword),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 24),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: _isLoading ? null : _forgotPassword,
+                              child: const Text('Forgot password?'),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
                           ElevatedButton(
                             onPressed: _isLoading ? null : _login,
                             child: _isLoading
@@ -194,8 +231,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // Create Account Navigation
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
