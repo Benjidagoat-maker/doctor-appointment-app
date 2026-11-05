@@ -1,1 +1,44 @@
-{"firestore":{"rules":"firestore.rules","indexes":"firestore.indexes.json"},"hosting":{"public":"build/web","ignore":["firebase.json","**/.*","**/node_modules/**"],"rewrites":[{"source":"**","destination":"/index.html"}]},"flutter":{"platforms":{"android":{"default":{"projectId":"doctor-appointment-2026","appId":"1:302972014402:android:1c5bf6449eb15f995f02db","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"doctor-appointment-2026","configurations":{"android":"1:302972014402:android:1c5bf6449eb15f995f02db","web":"1:302972014402:web:5e61d705a79e3b9a5f02db","windows":"1:302972014402:web:da65a69634f0bd425f02db"}}}}}}
+{
+  "database": {
+    "rules": "database.rules.json"
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "doctor-appointment-2026",
+          "appId": "1:302972014402:android:1c5bf6449eb15f995f02db",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "doctor-appointment-2026",
+          "configurations": {
+            "android": "1:302972014402:android:1c5bf6449eb15f995f02db",
+            "web": "1:302972014402:web:5e61d705a79e3b9a5f02db",
+            "windows": "1:302972014402:web:da65a69634f0bd425f02db"
+          }
+        }
+      }
+    }
+  }
+}

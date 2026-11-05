@@ -45,7 +45,9 @@ void main() {
 
   testWidgets('Register now opens the sign-up screen', (tester) async {
     await tester.pumpWidget(_app());
-    await tester.tap(find.text('Register now'));
+    final registerBtn = find.text('Register now');
+    await tester.ensureVisible(registerBtn);
+    await tester.tap(registerBtn);
     await tester.pumpAndSettle();
     expect(find.text('Create Account'), findsOneWidget);
   });
