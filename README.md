@@ -1,181 +1,163 @@
 <div align="center">
 
-# 🩺 Doctor Care & Appointment App
+# 🩺 Doctor Care
 
-### A cross-platform, enterprise-ready healthcare booking application built with Flutter, Firebase, and SQL Backend Architecture.
+A Flutter application for discovering doctors, booking appointments, and managing doctor availability with Firebase.
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Hosted%20on%20Firebase-0F67FE?style=for-the-badge&logo=firebase&logoColor=white)](https://doctor-appointment-2026.web.app)
-[![Flutter](https://img.shields.io/badge/Flutter-3.47+-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
-[![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20RTDB-FFCA28?style=for-the-badge&logo=firebase&logoColor=black)](https://firebase.google.com)
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Benjidagoat-maker/doctor-appointment-app)
+[![Flutter](https://img.shields.io/badge/Flutter-Dart-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
+[![Firebase](https://img.shields.io/badge/Backend-Firebase-FFCA28?style=for-the-badge&logo=firebase&logoColor=black)](https://firebase.google.com)
+[![Live demo](https://img.shields.io/badge/Live%20demo-Open-0F67FE?style=for-the-badge)](https://doctor-appointment-2026.web.app)
 
----
+[Open the web app](https://doctor-appointment-2026.web.app) · [Report a bug](https://github.com/Benjidagoat-maker/doctor-appointment-app/issues)
 
 </div>
 
-## 🌟 Overview
-
-The **Doctor Care Application** is designed to streamline the connection between patients and healthcare providers. It provides patients with effortless doctor discovery, custom scheduling, real-time presence indicators, and synchronized digital medical records, while offering healthcare managers an administrative control center to oversee providers and appointments.
-
 ---
 
-## 🚀 Live Demo
+## About
 
-Experience the live web build deployed via Firebase Hosting:
-👉 **[doctor-appointment-2026.web.app](https://doctor-appointment-2026.web.app)**
+Doctor Care is a cross-platform appointment-booking app built with Flutter and Dart. Patients can find doctors, view availability, book and cancel appointments, and see their appointment history. Administrators can manage the doctor directory and oversee bookings.
 
----
+The app uses Firebase Authentication for sign-in, Cloud Firestore for doctors and appointments, and Firebase Realtime Database for live doctor presence. An optional REST API integration can retrieve medical-record data from a SQL-backed service. Without that API configured, the app displays clearly labeled demo records instead.
 
-## 💡 Key Features
+> **Important:** This project is a software demo, not a medical service. Do not use it to store or process real patient information without appropriate security, privacy, and regulatory review.
 
-### 👤 For Patients
-- **Email Verification Guard**: Requires new users to verify their Gmail/email before granting access, featuring automatic real-time polling and re-send throttles.
-- **Doctor Directory & Instant Search**: Filter medical professionals by specialty, name, or phone number in real-time.
-- **Custom Booking System**: Interactive Date and Time picker to schedule visits with instant feedback.
-- **My Appointments Management**: View upcoming visits, check status (Confirmed / Cancelled), or cancel appointments.
-- **SQL Medical Records Sheet**: Interactive bottom-sheet view pulling historical medical records and diagnoses connected to external relational SQL databases.
+## Features
 
-### 🛡️ Real-Time & Security
-- **Firebase App Check**: Safeguards backend APIs against bots, scraping, and abuse using reCAPTCHA Enterprise and platform attestation.
-- **Live Presence & Notification Sync (Realtime Database)**: Live indicator displaying if doctors are online or in consultation, accompanied by instant push notifications upon appointment booking.
-- **Role-Based Access Control**: Strict segregation between patient interfaces and administrator panels powered by Cloud Firestore security rules.
+### Patients
+- Create an account and sign in with email and password; email verification is required.
+- Search the doctor directory by name, specialty, or phone number.
+- View doctor availability and live presence when Realtime Database is configured.
+- Choose a date and time to book an appointment, then view or cancel bookings.
+- View SQL-backed medical records when an API is configured; otherwise, see sample demo data.
 
-### 👨‍⚕️ For Administrators
-- **Doctor Catalog Management**: Register new medical specialists and update availability toggles.
-- **System-Wide Appointment Oversight**: Monitor all booked consultations in real time.
+### Administrators
+- Add and remove doctors and update their availability.
+- Review appointments across the app.
+- Admin access is controlled by the `role` field in the Firestore `users` collection; users cannot grant themselves admin access.
 
----
+### Security and backend
+- Firestore security rules restrict user data and appointment access.
+- Firebase App Check is initialized by the app. Production enforcement must also be configured in the Firebase Console.
+- Appointment booking prevents past appointments and duplicate bookings by the same patient in the client. Preventing different patients from booking the same slot requires an additional trusted server-side check.
 
-## 🛠️ Tech Stack & Architecture
+## Technology
 
-```
-┌────────────────────────────────────────────────────────┐
-│                   Flutter Client                       │
-│    (Web / Android / Windows / iOS / Material 3)        │
-└───────────┬─────────────────┬─────────────────┬────────┘
-            │                 │                 │
-            ▼                 ▼                 ▼
- ┌──────────────────┐ ┌───────────────┐ ┌───────────────┐
- │  Firebase Auth   │ │  Firestore &  │ │   REST API    │
- │   & App Check    │ │  Realtime DB  │ │  (SQL Gateway)│
- └──────────────────┘ └───────────────┘ └───────┬───────┘
-                                                │
-                                                ▼
-                                     ┌─────────────────────┐
-                                     │ MySQL / PostgreSQL  │
-                                     │    / Cloud SQL      │
-                                     └─────────────────────┘
-```
+- **App:** Flutter, Dart, Material Design
+- **Authentication:** Firebase Authentication
+- **Data:** Cloud Firestore and Firebase Realtime Database
+- **Optional integration:** SQL-backed REST API
+- **Hosting:** Firebase Hosting
+- **Automation:** GitHub Actions for analysis, tests, and hosting deployment
 
-| Domain | Technology / Service | Description |
-| :--- | :--- | :--- |
-| **Framework** | **Flutter 3.47+ & Dart** | Cross-platform UI toolkit targeting Web, Android, and Desktop |
-| **UI Design System** | **Material 3 / Custom AppTheme** | Clinical Blue (`#0F67FE`), rounded card geometries, custom typography |
-| **Authentication** | **Firebase Authentication** | Email/Password with mandatory email verification handshake |
-| **App Security** | **Firebase App Check** | reCAPTCHA Enterprise & device attestation against API abuse |
-| **Primary Database** | **Cloud Firestore** | Document-based NoSQL storage for users, doctors, and appointments |
-| **Live Updates** | **Firebase Realtime Database** | Sub-second sync for doctor live presence badges & instant alerts |
-| **Relational DB** | **SQL REST API Layer** | Connects to PostgreSQL, MySQL, or Google Cloud SQL for medical records |
-| **Deployment** | **Firebase Hosting & CI/CD** | Production-ready web distribution and automated deployment |
+## Run locally
 
----
+### Prerequisites
 
-## 📂 Project Structure
+- Flutter SDK on the stable channel, with a Dart SDK satisfying the constraint in `pubspec.yaml`
+- Git
+- A configured Firebase project for authentication and Firestore-backed app functionality
+- Firebase CLI if you plan to deploy Firebase resources or hosting
 
-```text
-lib/
-├── firebase_options.dart         # Auto-generated Firebase platform configs
-├── main.dart                     # App entry point & App Check activation
-├── models/
-│   ├── appointment_model.dart    # Appointment schema & serialization
-│   ├── doctor_model.dart         # Doctor entity definition
-│   └── user_model.dart           # User profile & RBAC representation
-├── screens/
-│   ├── admin_dashboard.dart      # Admin management console
-│   ├── appointments_screen.dart  # User booking overview & cancellations
-│   ├── doctor_details_screen.dart# Doctor profile, date-time booking & sync
-│   ├── email_verification_screen.dart # Realtime Gmail verification listener
-│   ├── home_screen.dart          # Searchable doctor feed & SQL sheet trigger
-│   ├── login_screen.dart         # Secure sign-in with verification handling
-│   └── signup_screen.dart        # User registration flow
-├── services/
-│   ├── auth_service.dart         # Authentication, sign-out & verification logic
-│   ├── firestore_service.dart    # Firestore CRUD operations & streams
-│   ├── realtime_db_service.dart  # Realtime presence & notification engine
-│   └── sql_api_service.dart      # MySQL / PostgreSQL / Cloud SQL connector
-└── theme/
-    └── app_theme.dart            # Medical theme, palette, and component styles
-```
+### Install dependencies
 
----
-
-## ⚡ Getting Started
-
-### 1. Prerequisites
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) (version 3.13+ / 3.47+)
-- [Git](https://git-scm.com/)
-- [Firebase CLI](https://firebase.google.com/docs/cli)
-
-### 2. Clone & Install
 ```bash
 git clone https://github.com/Benjidagoat-maker/doctor-appointment-app.git
 cd doctor-appointment-app
 flutter pub get
 ```
 
-### 3. Run Locally
+### Firebase configuration
+
+The repository includes FlutterFire configuration files for its existing Firebase project. To use your own project, create/configure the Firebase apps and regenerate the platform configuration with the [FlutterFire CLI](https://firebase.google.com/docs/flutter/setup):
+
 ```bash
-# Run in Chrome (debug builds use the App Check *debug* provider - see checklist below)
+flutterfire configure
+```
+
+In the Firebase Console, enable Email/Password sign-in and create a Cloud Firestore database. Add the domains you use (for example, `localhost` and your hosting domain) to Authentication's authorized domains. Review `firestore.rules` and `database.rules.json` before deploying rules to your project.
+
+For local App Check development, debug providers are used by debug builds. Register the debug token shown by the app in Firebase Console → App Check. For production, configure the appropriate App Check provider and enforcement settings in the console.
+
+### Start the app
+
+```bash
+# Run in Chrome
 flutter run -d chrome
 
-# Optional config (all have safe defaults)
-#   --dart-define=RECAPTCHA_SITE_KEY=...   reCAPTCHA Enterprise site key (web, release)
-#   --dart-define=SQL_API_URL=https://...  SQL REST backend (otherwise labelled demo data, no network calls)
-
-# Run on Windows Desktop
+# Run on Windows (requires the Windows desktop toolchain)
 flutter run -d windows
 ```
 
-### 4. Build & Deploy
-```bash
-# Build production web bundle
-flutter build web
+Other supported targets depend on the Flutter SDK and platform toolchains installed on your machine.
 
-# Deploy to Firebase Hosting
+### Optional SQL API
+
+Set `SQL_API_URL` to the base URL of a compatible REST API. The app expects the following endpoints:
+
+- `GET <SQL_API_URL>/patients/<patientId>/records` — returns a JSON array of records.
+- `POST <SQL_API_URL>/appointments/sync` — accepts appointment JSON.
+
+For example:
+
+```bash
+flutter run -d chrome --dart-define=SQL_API_URL=https://your-api.example.com/api
+```
+
+When `SQL_API_URL` is unset, the service uses its placeholder URL and returns demo records without making a network request. The sample client does not add authentication to these API requests; configure a trusted backend and appropriate authentication/authorization before connecting real data.
+
+## Build and deploy
+
+Build the web app:
+
+```bash
+flutter build web --release
+```
+
+The Firebase Hosting configuration serves `build/web`. To deploy, authenticate with Firebase CLI and select/configure the intended Firebase project first, then run:
+
+```bash
 firebase deploy --only hosting
 ```
 
----
+Firebase resources and rules can be deployed separately after reviewing the project configuration:
 
-## 🔧 Firebase Console checklist (fixes `cloud_firestore/unavailable` / "client is offline")
+```bash
+firebase deploy --only firestore:rules,database
+```
 
-That login error means the app could not reach Firestore. Check, in this order:
+The GitHub Actions workflow in `.github/workflows/deploy.yml` runs `flutter analyze` and `flutter test` and includes a Firebase Hosting deployment job. Configure the required `FIREBASE_SERVICE_ACCOUNT` repository secret before relying on automated deployment.
 
-1. **Firestore database exists** - Build → Firestore Database → *Create database*.
-2. **Auth** - Sign-in method → *Email/Password* enabled; Settings → *Authorized domains* contains `localhost` and your hosting domain.
-3. **App Check** - if *Cloud Firestore* shows **Enforced**, every request needs a valid token. For local development either set it to *Unenforced*, or run a debug build, copy the debug token printed in the browser console and add it under App Check → Apps → *Manage debug tokens*. For production, the reCAPTCHA Enterprise key must allow your hosting domain.
-4. **Network** - ad-blockers / VPNs / some proxies block the Firestore stream. The app now auto-falls back to long-polling, but test once in a clean browser profile.
-5. **Rules** - `firebase deploy --only firestore:rules`
-6. **Realtime Database (optional)** - create it, re-run `flutterfire configure` so `databaseURL` is generated, then deploy `database.rules.json`. The app works without it (presence/notifications are skipped).
-7. **First admin** - set `role` to `admin` on your document in the `users` collection (rules forbid self-promotion).
-
-## ✅ Tests & CI
+## Tests and analysis
 
 ```bash
 flutter analyze
 flutter test
 ```
 
-GitHub Actions (`.github/workflows/deploy.yml`) runs analyze + tests on every push/PR to `main` or `master` and deploys to Firebase Hosting only if they pass.
+## Project layout
 
-## 🛣️ Next steps
+```text
+lib/
+├── main.dart                 # Firebase initialization and app entry point
+├── firebase_options.dart     # FlutterFire platform configuration
+├── models/                   # User, doctor, and appointment data models
+├── screens/                  # Authentication, patient, and admin screens
+├── services/                 # Firebase and SQL REST API access
+├── theme/                    # App theme
+└── utils/                    # Shared helpers
 
-- Prevent two *different* patients booking the same slot (needs a Cloud Function or a `slots` collection - client rules can't see other users' appointments).
-- Firestore rules unit tests with the Firebase Emulator Suite.
-- Authenticate calls to the SQL API with the Firebase ID token.
-- Replace the `com.example.doctor_appointment_app` application id and add a release signing config before publishing to Play Store.
+firestore.rules               # Cloud Firestore security rules
+ database.rules.json           # Realtime Database security rules
+firebase.json                 # Firebase Hosting and service configuration
+```
 
----
+## Known limitations
 
-## 📄 License
-This project is open-source and available under the [MIT License](LICENSE).
+- The client cannot guarantee that two different patients will not book the same doctor and time. Add a server-side transaction or trusted booking function before using this for real scheduling.
+- The optional SQL API integration is a client-side example and does not authenticate requests. Do not connect it to sensitive data without adding server-side identity checks and access controls.
+- Configure Firebase services, authorized domains, App Check, and security rules for your own environment before deployment.
+
+## Contributing
+
+Issues and pull requests are welcome. For changes, run `flutter analyze` and `flutter test` before submitting a pull request.
