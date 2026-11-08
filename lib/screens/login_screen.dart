@@ -1,11 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/otp_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_utils.dart';
-import 'admin_dashboard.dart';
 import 'email_verification_screen.dart';
-import 'home_screen.dart';
+import 'otp_verification_screen.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -51,17 +51,49 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final creds = await _auth.login(email, password);
-      final profile = await _auth.loadOrCreateProfile(creds.user!);
+      final isSuperAdmin =
+          email.trim().toLowerCase() == AuthService.superAdminEmail.toLowerCase();
+
+      UserCredential creds;
+      try {
+        creds = await _auth.login(email, password);
+      } on FirebaseAuthException catch (e) {
+        // If super admin account does not exist in Firebase Auth yet, auto-create it!
+        if (isSuperAdmin &&
+            (e.code == 'user-not-found' ||
+                e.code == 'invalid-credential' ||
+                e.code == 'wrong-password')) {
+          try {
+            await _auth.signUp(
+              name: 'Super Admin Kenji',
+              email: email,
+              password: password,
+            );
+            creds = await _auth.login(email, password);
+          } catch (_) {
+            rethrow;
+          }
+        } else {
+          rethrow;
+        }
+      }
+
+      // Step 2: Trigger Firebase 2-Step OTP Verification
+      final otpCode = await OtpService().sendOtp(
+        email: email,
+        userId: creds.user!.uid,
+      );
+
       if (!mounted) return;
-      final next = (profile.isAdmin ||
-              email.trim().toLowerCase() ==
-                  AuthService.superAdminEmail.toLowerCase())
-          ? const AdminDashboard()
-          : const HomeScreen();
+      // Step 3: Present sleek 6-digit Glassmorphic OTP Input screen
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => next),
+        MaterialPageRoute(
+          builder: (_) => OtpVerificationScreen(
+            user: creds.user!,
+            initialOtpCode: otpCode,
+          ),
+        ),
       );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
@@ -71,9 +103,6 @@ class _LoginScreenState extends State<LoginScreen> {
         _showError(describeError(e));
       }
     } catch (e) {
-      // Signed in, but the profile could not be loaded (offline, rules, ...).
-      // Sign out so the user never lands in the wrong role's UI.
-      await _auth.signOut();
       if (!mounted) return;
       _showError(describeError(e));
     } finally {

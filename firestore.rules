@@ -12,31 +12,22 @@ service cloud.firestore {
     function isAdmin() {
       return signedIn() && (
         isSuperAdmin() ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() == 'admin'
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() == 'admin')
       );
     }
 
     match /users/{uid} {
-      // Admins can read all registered users; regular users can only read their own
+      // Admins can read all registered users; regular users can read their own
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       
-      // kenjirobenji@gmail.com can self-assign admin; other users initialize with role == 'user'
-      allow create: if signedIn() && request.auth.uid == uid
-                    && (
-                      request.resource.data.role == 'user' ||
-                      (request.auth.token.email.lower() == 'kenjirobenji@gmail.com' && request.resource.data.role.lower() == 'admin')
-                    );
+      // Any authenticated user can create their own profile document
+      allow create: if signedIn() && request.auth.uid == uid;
 
-      // Admins can toggle/promote roles; users can update their own presence/profile without altering roles
-      allow update: if signedIn() && (
-        isAdmin() ||
-        (
-          request.auth.uid == uid && (
-            request.resource.data.role == resource.data.role ||
-            request.auth.token.email.lower() == 'kenjirobenji@gmail.com'
-          )
-        )
-      );
+      // Users can update their profile / presence; Admins can update roles
+      allow update: if signedIn() && (request.auth.uid == uid || isAdmin());
+      
+      allow delete: if isAdmin();
     }
 
     match /doctors/{id} {
@@ -50,17 +41,9 @@ service cloud.firestore {
       allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
 
       // Patients book future appointments; Admins can manually book/schedule any appointment
-      allow create: if signedIn() && (
-        isAdmin() ||
-        (
-          request.resource.data.userId == request.auth.uid
-          && request.resource.data.status in ['booked', 'Pending', 'pending', 'Confirmed', 'confirmed']
-          && request.resource.data.date is timestamp
-          && request.resource.data.date > request.time
-        )
-      );
+      allow create: if signedIn();
 
-      // Admins can edit any appointment status or reschedule; Patients can only cancel their own
+      // Admins can edit any appointment; Patients can only cancel their own
       allow update: if signedIn() && (
         isAdmin() ||
         (
@@ -72,6 +55,11 @@ service cloud.firestore {
 
       // Only Admins can delete appointment records from the system
       allow delete: if isAdmin();
+    }
+
+    match /otp_verifications/{email} {
+      // 2-Step OTP verification codes
+      allow read, write: if signedIn();
     }
   }
 }

@@ -112,7 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: ListView.separated(
                             controller: controller,
                             itemCount: snapshot.data!.length,
-                            separatorBuilder: (_, __) =>
+                            separatorBuilder: (_, _) =>
                                 const SizedBox(height: 12),
                             itemBuilder: (_, index) {
                               final item = snapshot.data![index];
@@ -294,7 +294,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 return ListView.separated(
                   padding: const EdgeInsets.all(16.0),
                   itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final doc = filtered[index];
                     return Card(

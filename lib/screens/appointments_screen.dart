@@ -97,7 +97,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                 return ListView.separated(
                   padding: const EdgeInsets.all(16),
                   itemCount: appts.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final appt = appts[index];
                     final isCancelled = appt.isCancelled;
@@ -113,7 +113,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                             CircleAvatar(
                               backgroundColor: (isCancelled
                                       ? AppTheme.dangerRed
-                                      : AppTheme.primaryBlue)
+                                      : AppTheme.v22ElectricBlue)
                                   .withValues(alpha: 0.1),
                               child: Icon(
                                 isCancelled
@@ -121,7 +121,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                                     : Icons.calendar_today_rounded,
                                 color: isCancelled
                                     ? AppTheme.dangerRed
-                                    : AppTheme.primaryBlue,
+                                    : AppTheme.v22ElectricBlue,
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -129,10 +129,37 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(title,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 15)),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(title,
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 15)),
+                                      ),
+                                      if (appt.specialty.isNotEmpty &&
+                                          appt.specialty != 'General')
+                                        Container(
+                                          margin:
+                                              const EdgeInsets.only(left: 6),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.v22ElectricCyan
+                                                .withValues(alpha: 0.12),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            appt.specialty,
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                color: AppTheme.v22ElectricBlue,
+                                                fontWeight: FontWeight.w600),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                   const SizedBox(height: 4),
                                   Text(
                                     DateFormat.yMMMd().add_jm().format(appt.date),
