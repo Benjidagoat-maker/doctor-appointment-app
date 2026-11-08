@@ -3,6 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
 
 class AuthService {
+  /// Special Bootstrap Super Admin Email
+  static const String superAdminEmail = 'kenjirobenji@gmail.com';
+
   /// Firebase instances are resolved lazily so the service (and the screens
   /// that own one) can be constructed in tests without Firebase initialised.
   AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
@@ -21,9 +24,6 @@ class AuthService {
   bool get isEmailVerified => _auth.currentUser?.emailVerified ?? false;
 
   /// Registers a new user and sends the verification email.
-  /// The email is sent BEFORE the Firestore write so a database problem can
-  /// never leave an account that can't be verified; a missing profile is
-  /// recreated on first login by [loadOrCreateProfile].
   Future<void> signUp({
     required String name,
     required String email,
@@ -39,7 +39,7 @@ class AuthService {
     try {
       await createProfile(user, name: name);
     } catch (_) {
-      // Non-fatal, see doc comment above.
+      // Non-fatal: missing profile will be recreated on first login
     }
   }
 
@@ -74,8 +74,7 @@ class AuthService {
     return _auth.currentUser?.emailVerified ?? false;
   }
 
-  /// Reads the profile. Retries once on `unavailable` (a transient "client is
-  /// offline" is common right after sign-in on web while the connection opens).
+  /// Reads the profile. Retries once on `unavailable`.
   Future<UserModel?> getUserData(String uid) async {
     final ref = _db.collection('users').doc(uid);
     DocumentSnapshot<Map<String, dynamic>> doc;
@@ -91,22 +90,66 @@ class AuthService {
     return UserModel.fromMap(data, doc.id);
   }
 
-  /// Creates the default (non-admin) profile. Security rules only allow
-  /// role == 'user' here; admins are promoted manually in the console.
+  /// Creates user profile. Automatically grants 'admin' role if matching superAdminEmail.
   Future<UserModel> createProfile(User user, {String? name}) async {
     final email = user.email ?? '';
+    final isSuperAdmin = email.trim().toLowerCase() == superAdminEmail.toLowerCase();
+    final role = isSuperAdmin ? 'admin' : 'user';
+
     final profile = UserModel(
       uid: user.uid,
       name: name ?? user.displayName ?? email.split('@').first,
       email: email,
-      role: 'user',
+      role: role,
+      isOnline: true,
+      lastLogin: DateTime.now(),
+      createdAt: DateTime.now(),
     );
-    await _db.collection('users').doc(user.uid).set(profile.toMap());
+    await _db.collection('users').doc(user.uid).set(profile.toMap(), SetOptions(merge: true));
     return profile;
   }
 
-  Future<UserModel> loadOrCreateProfile(User user) async =>
-      await getUserData(user.uid) ?? await createProfile(user);
+  /// Loads profile or creates one, maintaining admin state and online presence
+  Future<UserModel> loadOrCreateProfile(User user) async {
+    var profile = await getUserData(user.uid);
+    final email = user.email ?? '';
+    final isSuperAdmin = email.trim().toLowerCase() == superAdminEmail.toLowerCase();
 
-  Future<void> signOut() => _auth.signOut();
+    if (profile == null) {
+      profile = await createProfile(user);
+    } else {
+      // If super admin email, guarantee admin role in Firestore
+      if (isSuperAdmin && profile.role.toLowerCase() != 'admin') {
+        profile = UserModel(
+          uid: profile.uid,
+          name: profile.name,
+          email: profile.email,
+          role: 'admin',
+          isOnline: true,
+          lastLogin: DateTime.now(),
+          createdAt: profile.createdAt,
+        );
+        await _db.collection('users').doc(user.uid).set(profile.toMap(), SetOptions(merge: true));
+      } else {
+        // Update presence
+        try {
+          await _db.collection('users').doc(user.uid).update({
+            'is_online': true,
+            'last_login': FieldValue.serverTimestamp(),
+          });
+        } catch (_) {}
+      }
+    }
+    return profile;
+  }
+
+  Future<void> signOut() async {
+    final user = currentUser;
+    if (user != null) {
+      try {
+        await _db.collection('users').doc(user.uid).update({'is_online': false});
+      } catch (_) {}
+    }
+    await _auth.signOut();
+  }
 }

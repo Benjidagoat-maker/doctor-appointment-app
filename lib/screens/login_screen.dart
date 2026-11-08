@@ -54,8 +54,11 @@ class _LoginScreenState extends State<LoginScreen> {
       final creds = await _auth.login(email, password);
       final profile = await _auth.loadOrCreateProfile(creds.user!);
       if (!mounted) return;
-      final next =
-          profile.role == 'admin' ? const AdminDashboard() : const HomeScreen();
+      final next = (profile.isAdmin ||
+              email.trim().toLowerCase() ==
+                  AuthService.superAdminEmail.toLowerCase())
+          ? const AdminDashboard()
+          : const HomeScreen();
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => next),

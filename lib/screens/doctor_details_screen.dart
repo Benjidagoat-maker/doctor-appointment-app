@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import '../models/doctor_model.dart';
 import '../services/firestore_service.dart';
@@ -140,11 +139,21 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                   children: [
                     CircleAvatar(
                       radius: 36,
-                      backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.12),
-                      child: Text(
-                        widget.doctor.name.isNotEmpty ? widget.doctor.name[0].toUpperCase() : 'D',
-                        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
-                      ),
+                      backgroundColor: AppTheme.v22ElectricBlue.withValues(alpha: 0.12),
+                      backgroundImage: widget.doctor.avatarUrl.isNotEmpty
+                          ? NetworkImage(widget.doctor.avatarUrl)
+                          : null,
+                      child: widget.doctor.avatarUrl.isEmpty
+                          ? Text(
+                              widget.doctor.name.isNotEmpty
+                                  ? widget.doctor.name[0].toUpperCase()
+                                  : 'D',
+                              style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.v22ElectricBlue),
+                            )
+                          : null,
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -153,19 +162,48 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                         children: [
                           Text(
                             widget.doctor.name,
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            widget.doctor.specialty,
-                            style: const TextStyle(color: AppTheme.primaryBlue, fontWeight: FontWeight.w600),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppTheme.v22ElectricCyan.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              widget.doctor.specialty,
+                              style: const TextStyle(
+                                  color: AppTheme.v22ElectricBlue,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12),
+                            ),
                           ),
                           const SizedBox(height: 6),
                           Row(
                             children: [
-                              const Icon(Icons.phone, size: 14, color: AppTheme.textMuted),
-                              const SizedBox(width: 4),
-                              Text(widget.doctor.phone, style: const TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+                              if (widget.doctor.phone.isNotEmpty) ...[
+                                const Icon(Icons.phone,
+                                    size: 14, color: AppTheme.textMuted),
+                                const SizedBox(width: 4),
+                                Text(widget.doctor.phone,
+                                    style: const TextStyle(
+                                        color: AppTheme.textMuted,
+                                        fontSize: 13)),
+                                const SizedBox(width: 10),
+                              ],
+                              if (widget.doctor.experienceYears > 0) ...[
+                                const Icon(Icons.work_history_outlined,
+                                    size: 14, color: AppTheme.textMuted),
+                                const SizedBox(width: 4),
+                                Text('${widget.doctor.experienceYears} yrs',
+                                    style: const TextStyle(
+                                        color: AppTheme.textMuted,
+                                        fontSize: 13)),
+                              ],
                             ],
                           ),
                         ],
@@ -175,6 +213,32 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                 ),
               ),
             ),
+            if (widget.doctor.bio.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'About Doctor',
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textDark),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        widget.doctor.bio,
+                        style: const TextStyle(
+                            fontSize: 13, color: AppTheme.textMuted, height: 1.4),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
 
             // Live Realtime Database Status Badge
