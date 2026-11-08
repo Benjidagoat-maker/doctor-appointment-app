@@ -56,5 +56,10 @@ service cloud.firestore {
       // Only Admins can delete appointment records from the system
       allow delete: if isAdmin();
     }
+
+    match /otp_verifications/{email} {
+      // 2-Step OTP verification codes
+      allow read, write: if signedIn();
+    }
   }
 }

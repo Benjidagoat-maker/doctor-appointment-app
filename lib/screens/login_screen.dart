@@ -1,11 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/otp_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_utils.dart';
-import 'admin_dashboard.dart';
 import 'email_verification_screen.dart';
-import 'home_screen.dart';
+import 'otp_verification_screen.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -78,14 +78,22 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
 
-      final profile = await _auth.loadOrCreateProfile(creds.user!);
+      // Step 2: Trigger Firebase 2-Step OTP Verification
+      final otpCode = await OtpService().sendOtp(
+        email: email,
+        userId: creds.user!.uid,
+      );
+
       if (!mounted) return;
-      final next = (profile.isAdmin || isSuperAdmin)
-          ? const AdminDashboard()
-          : const HomeScreen();
+      // Step 3: Present sleek 6-digit Glassmorphic OTP Input screen
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => next),
+        MaterialPageRoute(
+          builder: (_) => OtpVerificationScreen(
+            user: creds.user!,
+            initialOtpCode: otpCode,
+          ),
+        ),
       );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
