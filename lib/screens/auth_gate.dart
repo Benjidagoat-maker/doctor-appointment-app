@@ -22,15 +22,21 @@ class _AuthGateState extends State<AuthGate> {
       // First event = persisted session restored (currentUser is not reliable
       // yet at cold start on web).
       final user = await FirebaseAuth.instance.authStateChanges().first;
-      if (user == null || !user.emailVerified) return const LoginScreen();
-      final profile = await AuthService().loadOrCreateProfile(user);
-      
+      if (user == null) return const LoginScreen();
+
       final isSuperAdmin = (user.email ?? '').trim().toLowerCase() ==
           AuthService.superAdminEmail.toLowerCase();
-          
-      return (profile.isAdmin || isSuperAdmin)
-          ? const AdminDashboard()
-          : const HomeScreen();
+
+      if (!isSuperAdmin && !user.emailVerified) return const LoginScreen();
+
+      try {
+        final profile = await AuthService().loadOrCreateProfile(user);
+        return (profile.isAdmin || isSuperAdmin)
+            ? const AdminDashboard()
+            : const HomeScreen();
+      } catch (_) {
+        return isSuperAdmin ? const AdminDashboard() : const HomeScreen();
+      }
     } catch (_) {
       // Can't load the profile (offline, rules...): fall back to a clean login.
       return const LoginScreen();

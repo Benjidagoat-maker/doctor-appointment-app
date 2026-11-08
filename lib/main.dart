@@ -84,8 +84,19 @@ class _AdminRouteGuard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = AuthService().currentUser;
-    if (user == null || !user.emailVerified) {
+    if (user == null) {
       return const LoginScreen();
+    }
+
+    final isSuperAdmin = (user.email ?? '').trim().toLowerCase() ==
+        AuthService.superAdminEmail.toLowerCase();
+
+    if (!isSuperAdmin && !user.emailVerified) {
+      return const LoginScreen();
+    }
+
+    if (isSuperAdmin) {
+      return const AdminDashboard();
     }
 
     return FutureBuilder(
@@ -97,10 +108,7 @@ class _AdminRouteGuard extends StatelessWidget {
           );
         }
         final profile = snapshot.data;
-        final isSuperAdmin = (user.email ?? '').trim().toLowerCase() ==
-            AuthService.superAdminEmail.toLowerCase();
-
-        if (profile != null && (profile.isAdmin || isSuperAdmin)) {
+        if (profile != null && profile.isAdmin) {
           return const AdminDashboard();
         }
         return const LoginScreen();

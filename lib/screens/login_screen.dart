@@ -51,12 +51,36 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final creds = await _auth.login(email, password);
+      final isSuperAdmin =
+          email.trim().toLowerCase() == AuthService.superAdminEmail.toLowerCase();
+
+      UserCredential creds;
+      try {
+        creds = await _auth.login(email, password);
+      } on FirebaseAuthException catch (e) {
+        // If super admin account does not exist in Firebase Auth yet, auto-create it!
+        if (isSuperAdmin &&
+            (e.code == 'user-not-found' ||
+                e.code == 'invalid-credential' ||
+                e.code == 'wrong-password')) {
+          try {
+            await _auth.signUp(
+              name: 'Super Admin Kenji',
+              email: email,
+              password: password,
+            );
+            creds = await _auth.login(email, password);
+          } catch (_) {
+            rethrow;
+          }
+        } else {
+          rethrow;
+        }
+      }
+
       final profile = await _auth.loadOrCreateProfile(creds.user!);
       if (!mounted) return;
-      final next = (profile.isAdmin ||
-              email.trim().toLowerCase() ==
-                  AuthService.superAdminEmail.toLowerCase())
+      final next = (profile.isAdmin || isSuperAdmin)
           ? const AdminDashboard()
           : const HomeScreen();
       Navigator.pushReplacement(
@@ -71,9 +95,6 @@ class _LoginScreenState extends State<LoginScreen> {
         _showError(describeError(e));
       }
     } catch (e) {
-      // Signed in, but the profile could not be loaded (offline, rules, ...).
-      // Sign out so the user never lands in the wrong role's UI.
-      await _auth.signOut();
       if (!mounted) return;
       _showError(describeError(e));
     } finally {
