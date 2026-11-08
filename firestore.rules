@@ -2,47 +2,76 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    
+    // Super Admin bootstrap rule: kenjirobenji@gmail.com
+    function isSuperAdmin() {
+      return signedIn() && request.auth.token.email != null &&
+        request.auth.token.email.lower() == 'kenjirobenji@gmail.com';
+    }
+    
     function isAdmin() {
-      return signedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return signedIn() && (
+        isSuperAdmin() ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() == 'admin'
+      );
     }
 
     match /users/{uid} {
+      // Admins can read all registered users; regular users can only read their own
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      // Nobody can self-assign admin: set role manually in the Firebase console.
+      
+      // kenjirobenji@gmail.com can self-assign admin; other users initialize with role == 'user'
       allow create: if signedIn() && request.auth.uid == uid
-                    && request.resource.data.role == 'user'
-                    && request.resource.data.keys().hasOnly(['name', 'email', 'role']);
-      allow update: if signedIn() && request.auth.uid == uid
-                    && request.resource.data.role == resource.data.role;
+                    && (
+                      request.resource.data.role == 'user' ||
+                      (request.auth.token.email.lower() == 'kenjirobenji@gmail.com' && request.resource.data.role.lower() == 'admin')
+                    );
+
+      // Admins can toggle/promote roles; users can update their own presence/profile without altering roles
+      allow update: if signedIn() && (
+        isAdmin() ||
+        (
+          request.auth.uid == uid && (
+            request.resource.data.role == resource.data.role ||
+            request.auth.token.email.lower() == 'kenjirobenji@gmail.com'
+          )
+        )
+      );
     }
 
     match /doctors/{id} {
       allow read: if signedIn();
       allow write: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /appointments/{id} {
+      // Patients read their own appointments; Admins have complete visibility across all doctors & specialties
       allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
 
-      // A patient can only create a *booked* appointment for themselves,
-      // in the future, with exactly the expected fields.
-      allow create: if signedIn()
-                    && request.resource.data.userId == request.auth.uid
-                    && request.resource.data.status == 'booked'
-                    && request.resource.data.keys().hasOnly(
-                         ['userId', 'doctorId', 'doctorName', 'date', 'status', 'createdAt'])
-                    && request.resource.data.date is timestamp
-                    && request.resource.data.date > request.time;
+      // Patients book future appointments; Admins can manually book/schedule any appointment
+      allow create: if signedIn() && (
+        isAdmin() ||
+        (
+          request.resource.data.userId == request.auth.uid
+          && request.resource.data.status in ['booked', 'Pending', 'pending', 'Confirmed', 'confirmed']
+          && request.resource.data.date is timestamp
+          && request.resource.data.date > request.time
+        )
+      );
 
-      // Only `status` may change. Patients can only cancel their own booking;
-      // admins can set either status.
-      allow update: if signedIn()
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
-                    && request.resource.data.status in ['booked', 'cancelled']
-                    && (isAdmin()
-                        || (resource.data.userId == request.auth.uid
-                            && request.resource.data.status == 'cancelled'));
+      // Admins can edit any appointment status or reschedule; Patients can only cancel their own
+      allow update: if signedIn() && (
+        isAdmin() ||
+        (
+          resource.data.userId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+          && request.resource.data.status in ['booked', 'cancelled', 'Cancelled']
+        )
+      );
+
+      // Only Admins can delete appointment records from the system
+      allow delete: if isAdmin();
     }
   }
 }

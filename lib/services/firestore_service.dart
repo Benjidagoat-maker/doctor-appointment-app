@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/appointment_model.dart';
 import '../models/doctor_model.dart';
+import '../models/user_model.dart';
 import '../utils/app_utils.dart';
 
 class FirestoreService {
@@ -9,6 +10,33 @@ class FirestoreService {
   final FirebaseFirestore? _dbOverride;
   FirebaseFirestore get _db => _dbOverride ?? FirebaseFirestore.instance;
 
+  // ============================================================
+  // USERS MANAGEMENT (Admin-Only Live Monitor & Role Toggling)
+  // ============================================================
+  Stream<List<UserModel>> getAllUsers() {
+    return _db.collection('users').snapshots().map((snapshot) {
+      final list = snapshot.docs
+          .map((doc) => UserModel.fromMap(doc.data(), doc.id))
+          .toList();
+      // Sort online users first, then alphabetically by name
+      list.sort((a, b) {
+        if (a.isOnline != b.isOnline) {
+          return a.isOnline ? -1 : 1;
+        }
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+      return list;
+    });
+  }
+
+  Future<void> toggleUserRole(String uid, String currentRole) async {
+    final targetRole = currentRole.toLowerCase() == 'admin' ? 'user' : 'admin';
+    await _db.collection('users').doc(uid).update({'role': targetRole});
+  }
+
+  // ============================================================
+  // DOCTORS & SPECIALTIES MANAGEMENT
+  // ============================================================
   Stream<List<DoctorModel>> getDoctors() =>
       _db.collection('doctors').snapshots().map((s) {
         final list =
@@ -27,9 +55,9 @@ class FirestoreService {
   Future<void> deleteDoctor(String id) =>
       _db.collection('doctors').doc(id).delete();
 
-  /// Books an appointment. Rejects past times and an exact duplicate of the
-  /// user's own booking. (Preventing two *different* patients taking the same
-  /// slot needs a server-side check, see README "Next steps".)
+  // ============================================================
+  // APPOINTMENTS MANAGEMENT
+  // ============================================================
   Future<void> bookAppointment({
     required String userId,
     required String doctorId,
@@ -65,12 +93,30 @@ class FirestoreService {
     await _db.collection('appointments').add(appt.toMap());
   }
 
-  Future<void> cancelAppointment(String appointmentId) => _db
+  /// Admin manual appointment creation
+  Future<void> addAppointment(AppointmentModel appt) =>
+      _db.collection('appointments').add(appt.toMap());
+
+  /// Admin update appointment status (Confirm/Cancel/Completed/Pending)
+  Future<void> updateAppointmentStatus(String appointmentId, String status) => _db
       .collection('appointments')
       .doc(appointmentId)
-      .update({'status': 'cancelled'});
+      .update({'status': status});
 
-  /// Newest first. Sorted on the client so no composite index is required.
+  /// Admin reschedule appointment date
+  Future<void> rescheduleAppointment(String appointmentId, DateTime newDate) => _db
+      .collection('appointments')
+      .doc(appointmentId)
+      .update({'date': Timestamp.fromDate(newDate)});
+
+  /// Admin delete appointment record
+  Future<void> deleteAppointment(String appointmentId) =>
+      _db.collection('appointments').doc(appointmentId).delete();
+
+  Future<void> cancelAppointment(String appointmentId) =>
+      updateAppointmentStatus(appointmentId, 'cancelled');
+
+  /// Newest first. Sorted on client so no composite index required.
   Stream<List<AppointmentModel>> getUserAppointments(String userId) => _db
       .collection('appointments')
       .where('userId', isEqualTo: userId)

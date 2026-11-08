@@ -5,8 +5,8 @@ import 'admin_dashboard.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
 
-/// Restores the previous session on app start instead of always showing the
-/// login form: verified user -> Home (or Admin), otherwise -> Login.
+/// Restores the previous session on app start with Strict Admin Gatekeeping:
+/// verified admin -> Admin Dashboard V22, verified patient -> Home, otherwise -> Login.
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
 
@@ -24,7 +24,11 @@ class _AuthGateState extends State<AuthGate> {
       final user = await FirebaseAuth.instance.authStateChanges().first;
       if (user == null || !user.emailVerified) return const LoginScreen();
       final profile = await AuthService().loadOrCreateProfile(user);
-      return profile.role == 'admin'
+      
+      final isSuperAdmin = (user.email ?? '').trim().toLowerCase() ==
+          AuthService.superAdminEmail.toLowerCase();
+          
+      return (profile.isAdmin || isSuperAdmin)
           ? const AdminDashboard()
           : const HomeScreen();
     } catch (_) {
@@ -39,7 +43,11 @@ class _AuthGateState extends State<AuthGate> {
       future: _destination,
       builder: (context, snapshot) {
         if (snapshot.hasData) return snapshot.data!;
-        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        return const Scaffold(
+          body: Center(
+            child: CircularProgressIndicator(),
+          ),
+        );
       },
     );
   }
