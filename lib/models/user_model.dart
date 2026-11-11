@@ -4,7 +4,7 @@ class UserModel {
   final String uid;
   final String name;
   final String email;
-  final String role; // 'user' or 'admin'
+  final String role; // 'user' | 'patient' | 'doctor' | 'admin'
   final bool isOnline;
   final DateTime? lastLogin;
   final DateTime? createdAt;
@@ -19,7 +19,20 @@ class UserModel {
     this.createdAt,
   });
 
-  bool get isAdmin => role.toLowerCase() == 'admin';
+  static String normalizeRole(dynamic value, {String fallback = 'user'}) {
+    final role = (value ?? fallback).toString().trim().toLowerCase();
+    if (role == 'patient' || role == 'user') {
+      return role;
+    }
+    if (role == 'doctor' || role == 'admin') {
+      return role;
+    }
+    return fallback;
+  }
+
+  bool get isPatient => normalizeRole(role) == 'user' || normalizeRole(role) == 'patient';
+  bool get isDoctor => normalizeRole(role) == 'doctor';
+  bool get isAdmin => normalizeRole(role) == 'admin';
 
   static DateTime? parseDate(dynamic value) {
     if (value == null) return null;
@@ -33,7 +46,7 @@ class UserModel {
         uid: id,
         name: map['name'] ?? '',
         email: map['email'] ?? '',
-        role: map['role'] ?? 'user',
+        role: normalizeRole(map['role']),
         isOnline: map['is_online'] ?? map['isOnline'] ?? false,
         lastLogin: parseDate(map['last_login'] ?? map['lastLogin']),
         createdAt: parseDate(map['created_at'] ?? map['createdAt']),
@@ -42,7 +55,7 @@ class UserModel {
   Map<String, dynamic> toMap() => {
         'name': name,
         'email': email,
-        'role': role,
+        'role': normalizeRole(role),
         'is_online': isOnline,
         if (lastLogin != null) 'last_login': Timestamp.fromDate(lastLogin!),
         if (createdAt != null) 'created_at': Timestamp.fromDate(createdAt!),
