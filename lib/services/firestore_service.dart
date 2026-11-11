@@ -30,7 +30,7 @@ class FirestoreService {
   }
 
   Future<void> toggleUserRole(String uid, String currentRole) async {
-    final targetRole = currentRole.toLowerCase() == 'admin' ? 'user' : 'admin';
+    final targetRole = UserModel.normalizeRole(currentRole) == 'admin' ? 'user' : 'admin';
     await _db.collection('users').doc(uid).update({'role': targetRole});
   }
 

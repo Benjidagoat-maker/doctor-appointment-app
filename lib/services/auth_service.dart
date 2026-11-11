@@ -132,7 +132,7 @@ class AuthService {
           'role': role,
         }, SetOptions(merge: true));
       } catch (_) {
-        // Last-resort fallback for rules requiring role == 'user'
+        // Last-resort fallback for rules requiring the legacy user role
         try {
           await _db.collection('users').doc(user.uid).set({
             'name': profile.name,
