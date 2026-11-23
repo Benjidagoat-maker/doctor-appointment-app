@@ -34,6 +34,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         if (!mounted) return;
         // Sign out so user logs in freshly (triggers the new login guard)
         await _auth.signOut();
+        if (!mounted) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const LoginScreen()),
