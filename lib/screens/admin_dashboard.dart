@@ -481,7 +481,10 @@ class _AdminDashboardState extends State<AdminDashboard>
 
   Future<void> _updateAppointmentStatus(AppointmentModel appt, String newStatus) async {
     await _run(
-      () => _firestoreService.updateAppointmentStatus(appt.id, newStatus),
+      () => _firestoreService.updateAppointmentStatus(
+        appointmentId: appt.id,
+        newStatus: newStatus,
+      ),
       successMsg: 'Status updated to $newStatus.',
     );
   }

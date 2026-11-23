@@ -9,9 +9,11 @@ import '../services/realtime_db_service.dart';
 import '../services/sql_api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_utils.dart';
+import '../utils/slot_generator.dart';
 
 class DoctorDetailsScreen extends StatefulWidget {
   final DoctorModel doctor;
+
   const DoctorDetailsScreen({super.key, required this.doctor});
 
   @override
@@ -19,40 +21,62 @@ class DoctorDetailsScreen extends StatefulWidget {
 }
 
 class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
-  final _firestoreService = FirestoreService();
-  final _authService = AuthService();
-  final _realtimeDb = RealtimeDbService();
-  final _sqlService = SqlApiService();
+  final FirestoreService _firestoreService = FirestoreService();
+  final AuthService _authService = AuthService();
+  final RealtimeDbService _realtimeDb = RealtimeDbService();
+  final SqlApiService _sqlService = SqlApiService();
 
-  DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
-  TimeOfDay _selectedTime = const TimeOfDay(hour: 10, minute: 0);
+  late DateTime _selectedDate;
+  DateTime? _selectedSlot;
+  final TextEditingController _reasonController = TextEditingController();
   bool _isBooking = false;
-  late final Stream<DatabaseEvent> _presenceStream =
-      _realtimeDb.getDoctorLivePresence(widget.doctor.id);
+  Stream<DatabaseEvent>? _presenceStream;
 
-  void _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 90)),
-    );
-    if (picked != null) {
-      setState(() => _selectedDate = picked);
-    }
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = DateTime.now().add(const Duration(days: 1));
+    _presenceStream = _realtimeDb.getDoctorLivePresence(widget.doctor.id);
   }
 
-  void _pickTime() async {
-    final picked = await showTimePicker(
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  void _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
       context: context,
-      initialTime: _selectedTime,
+      initialDate: _selectedDate.isBefore(now) ? now : _selectedDate,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 60)), // Up to 60 days (F-20)
+      selectableDayPredicate: (DateTime day) {
+        // Gray out daysOff (F-20)
+        final dayStr = SlotGenerator.formatDayString(day);
+        if (widget.doctor.daysOff.contains(dayStr)) return false;
+        final key = SlotGenerator.weekdayKey(day.weekday);
+        final ranges = widget.doctor.schedule[key] ?? [];
+        return ranges.isNotEmpty;
+      },
     );
     if (picked != null) {
-      setState(() => _selectedTime = picked);
+      setState(() {
+        _selectedDate = picked;
+        _selectedSlot = null; // reset slot selection
+      });
     }
   }
 
   void _bookAppointment() async {
+    if (_selectedSlot == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Veuillez sélectionner un créneau.')),
+      );
+      return;
+    }
+
     final user = _authService.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -61,25 +85,67 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       return;
     }
 
-    setState(() => _isBooking = true);
-    final bookingDateTime = DateTime(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-      _selectedTime.hour,
-      _selectedTime.minute,
+    // Modal Confirmation Dialog (F-22)
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirmer le rendez-vous'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Médecin : ${widget.doctor.name}'),
+            Text('Spécialité : ${widget.doctor.specialty}'),
+            if (widget.doctor.clinicAddress.isNotEmpty)
+              Text('Adresse : ${widget.doctor.clinicAddress}'),
+            const SizedBox(height: 8),
+            Text(
+              'Date et heure : ${DateFormat.yMMMMEEEEd().add_jm().format(_selectedSlot!)}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _reasonController,
+              decoration: const InputDecoration(
+                labelText: 'Motif de consultation (optionnel)',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirmer'),
+          ),
+        ],
+      ),
     );
 
+    if (confirm != true) return;
+
+    setState(() => _isBooking = true);
+    final bookingDateTime = _selectedSlot!;
+
     try {
-      // 1. The booking itself (Cloud Firestore) is the only critical step.
-      await _firestoreService.bookAppointment(
+      final apptId = await _firestoreService.bookAppointment(
         userId: user.uid,
+        patientName: user.displayName ?? '',
+        patientEmail: user.email ?? '',
         doctorId: widget.doctor.id,
         doctorName: widget.doctor.name,
+        specialty: widget.doctor.specialty,
         date: bookingDateTime,
+        durationMin: widget.doctor.slotDurationMin,
+        reason: _reasonController.text.trim(),
       );
 
-      // 2. Best-effort extras: a failure here must never fail the booking.
+      // Best-effort RTDB & SQL sync
       try {
         await _realtimeDb.sendRealtimeNotification(
           recipientUid: user.uid,
@@ -90,7 +156,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       } catch (e) {
         debugPrint('Realtime notification skipped: $e');
       }
+
       unawaited(_sqlService.syncAppointmentToSql({
+        'id': apptId,
         'userId': user.uid,
         'doctorId': widget.doctor.id,
         'doctorName': widget.doctor.name,
@@ -102,7 +170,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              'Appointment booked for ${DateFormat.yMMMd().add_jm().format(bookingDateTime)}.'),
+              'Rendez-vous confirmé pour ${DateFormat.yMMMd().add_jm().format(bookingDateTime)}.'),
           backgroundColor: AppTheme.successGreen,
         ),
       );
@@ -139,7 +207,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                   children: [
                     CircleAvatar(
                       radius: 36,
-                      backgroundColor: AppTheme.v22ElectricBlue.withValues(alpha: 0.12),
+                      backgroundColor:
+                          AppTheme.primaryBlue.withValues(alpha: 0.12),
                       backgroundImage: widget.doctor.avatarUrl.isNotEmpty
                           ? NetworkImage(widget.doctor.avatarUrl)
                           : null,
@@ -151,7 +220,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                               style: const TextStyle(
                                   fontSize: 28,
                                   fontWeight: FontWeight.bold,
-                                  color: AppTheme.v22ElectricBlue),
+                                  color: AppTheme.primaryBlue),
                             )
                           : null,
                     ),
@@ -166,44 +235,42 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                                 fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color:
-                                  AppTheme.v22ElectricCyan.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              widget.doctor.specialty,
-                              style: const TextStyle(
-                                  color: AppTheme.v22ElectricBlue,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12),
-                            ),
+                          Text(
+                            widget.doctor.specialty,
+                            style: const TextStyle(
+                                color: AppTheme.primaryBlue,
+                                fontWeight: FontWeight.w600),
                           ),
-                          const SizedBox(height: 6),
+                          if (widget.doctor.clinicAddress.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(Icons.location_on_outlined,
+                                    size: 14, color: AppTheme.textMuted),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    widget.doctor.clinicAddress,
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppTheme.textMuted),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          const SizedBox(height: 4),
                           Row(
                             children: [
-                              if (widget.doctor.phone.isNotEmpty) ...[
-                                const Icon(Icons.phone,
-                                    size: 14, color: AppTheme.textMuted),
-                                const SizedBox(width: 4),
-                                Text(widget.doctor.phone,
-                                    style: const TextStyle(
-                                        color: AppTheme.textMuted,
-                                        fontSize: 13)),
-                                const SizedBox(width: 10),
-                              ],
-                              if (widget.doctor.experienceYears > 0) ...[
-                                const Icon(Icons.work_history_outlined,
-                                    size: 14, color: AppTheme.textMuted),
-                                const SizedBox(width: 4),
-                                Text('${widget.doctor.experienceYears} yrs',
-                                    style: const TextStyle(
-                                        color: AppTheme.textMuted,
-                                        fontSize: 13)),
-                              ],
+                              const Icon(Icons.phone_outlined,
+                                  size: 14, color: AppTheme.textMuted),
+                              const SizedBox(width: 4),
+                              Text(
+                                widget.doctor.phone,
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.textMuted),
+                              ),
                             ],
                           ),
                         ],
@@ -213,8 +280,9 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+
             if (widget.doctor.bio.isNotEmpty) ...[
-              const SizedBox(height: 16),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -224,45 +292,51 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                       const Text(
                         'About Doctor',
                         style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.textDark),
+                            fontSize: 15, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         widget.doctor.bio,
                         style: const TextStyle(
-                            fontSize: 13, color: AppTheme.textMuted, height: 1.4),
+                            fontSize: 13,
+                            color: AppTheme.textMuted,
+                            height: 1.4),
                       ),
                     ],
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
             ],
-            const SizedBox(height: 20),
 
             // Live Realtime Database Status Badge
             Card(
               color: const Color(0xFFF0FDF4),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0, vertical: 12.0),
                 child: Row(
                   children: [
-                    const Icon(Icons.bolt_rounded, color: AppTheme.successGreen),
+                    const Icon(Icons.bolt_rounded,
+                        color: AppTheme.successGreen),
                     const SizedBox(width: 10),
                     Expanded(
                       child: StreamBuilder<DatabaseEvent>(
                         stream: _presenceStream,
                         builder: (context, snapshot) {
                           final value = snapshot.data?.snapshot.value;
-                          final hasLive = value is Map && value['isOnline'] != null;
-                          final online = value is Map && value['isOnline'] == true;
+                          final hasLive =
+                              value is Map && value['isOnline'] != null;
+                          final online =
+                              value is Map && value['isOnline'] == true;
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 hasLive
-                                    ? (online ? 'Doctor is online now' : 'Doctor is currently offline')
+                                    ? (online
+                                        ? 'Doctor is online now'
+                                        : 'Doctor is currently offline')
                                     : 'Live status not available',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w700,
@@ -271,7 +345,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                               ),
                               const Text(
                                 'You can book a slot regardless of live status',
-                                style: TextStyle(fontSize: 12, color: Color(0xFF15803D)),
+                                style: TextStyle(
+                                    fontSize: 12, color: Color(0xFF15803D)),
                               ),
                             ],
                           );
@@ -282,55 +357,113 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                 ),
               ),
             ),
+
             const SizedBox(height: 24),
 
-            Text(
-              'Select Date & Time',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-
+            // Date picker row
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: _pickDate,
-                    icon: const Icon(Icons.calendar_today_outlined, size: 18),
-                    label: Text(DateFormat.yMMMd().format(_selectedDate)),
-                  ),
+                Text(
+                  'Sélectionner la date',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: _pickTime,
-                    icon: const Icon(Icons.access_time_outlined, size: 18),
-                    label: Text(_selectedTime.format(context)),
-                  ),
+                OutlinedButton.icon(
+                  onPressed: _pickDate,
+                  icon: const Icon(Icons.calendar_today_outlined, size: 16),
+                  label: Text(DateFormat.yMMMd().format(_selectedDate)),
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+
+            // Real-time slot grid using bookedSlots subcollection
+            Text(
+              'Créneaux disponibles',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 8),
+
+            StreamBuilder<Set<String>>(
+              stream: _firestoreService.getDoctorBookedSlots(widget.doctor.id),
+              builder: (context, snapshot) {
+                final bookedKeys = snapshot.data ?? {};
+                final slots = SlotGenerator.slotsFor(
+                  doctor: widget.doctor,
+                  day: _selectedDate,
+                  bookedSlotKeys: bookedKeys,
+                );
+
+                if (slots.isEmpty) {
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Aucun créneau disponible pour cette date.',
+                        style: TextStyle(color: AppTheme.textMuted),
+                      ),
+                    ),
+                  );
+                }
+
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: slots.map((slot) {
+                    final isSelected = _selectedSlot != null &&
+                        _selectedSlot!.isAtSameMomentAs(slot);
+                    final timeText = DateFormat.jm().format(slot);
+
+                    return ChoiceChip(
+                      label: Text(timeText),
+                      selected: isSelected,
+                      selectedColor: AppTheme.primaryBlue,
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.white : Colors.black87,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      onSelected: (selected) {
+                        setState(() {
+                          _selectedSlot = selected ? slot : null;
+                        });
+                      },
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+
             const SizedBox(height: 36),
 
             SizedBox(
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: (widget.doctor.available && !_isBooking) ? _bookAppointment : null,
+                onPressed: (widget.doctor.active &&
+                        _selectedSlot != null &&
+                        !_isBooking)
+                    ? _bookAppointment
+                    : null,
                 child: _isBooking
                     ? const SizedBox(
                         height: 20,
                         width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
                       )
-                    : Text(widget.doctor.available ? 'Confirm Appointment' : 'Currently Unavailable'),
+                    : Text(widget.doctor.active
+                        ? 'Confirmer le créneau'
+                        : 'Actuellement indisponible'),
               ),
             ),
           ],
