@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
 import '../models/appointment_model.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
@@ -38,7 +39,8 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'L\'annulation n\'est permise que jusqu\'à 48 h avant le rendez-vous.'),
+            'Appointments can only be cancelled at least 48 hours in advance.',
+          ),
           backgroundColor: AppTheme.dangerRed,
         ),
       );
@@ -48,20 +50,21 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Annuler le rendez-vous'),
+        title: const Text('Cancel appointment?'),
         content: Text(
-          'Voulez-vous vraiment annuler votre consultation avec ${appt.doctorName.isNotEmpty ? appt.doctorName : "ce médecin"} ?',
+          'Cancel your appointment with ${appt.doctorName.isNotEmpty ? appt.doctorName : "this doctor"}?',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Non'),
+            child: const Text('Keep appointment'),
           ),
           ElevatedButton(
-            style:
-                ElevatedButton.styleFrom(backgroundColor: AppTheme.dangerRed),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.dangerRed,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Oui, annuler'),
+            child: const Text('Cancel'),
           ),
         ],
       ),
@@ -77,7 +80,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Rendez-vous annulé avec succès.'),
+          content: Text('Appointment cancelled.'),
           backgroundColor: AppTheme.successGreen,
         ),
       );
@@ -85,8 +88,9 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(describeError(e)),
-            backgroundColor: AppTheme.dangerRed),
+          content: Text(describeError(e)),
+          backgroundColor: AppTheme.dangerRed,
+        ),
       );
     }
   }
@@ -97,88 +101,106 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
 
     if (user == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Mes rendez-vous')),
-        body: const Center(child: Text('Veuillez vous connecter.')),
+        appBar: AppBar(title: const Text('Appointments')),
+        body: const Center(child: Text('Please sign in to view appointments.')),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mes rendez-vous'),
+        title: const Text('Appointments'),
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppTheme.primaryBlue,
           indicatorColor: AppTheme.primaryBlue,
           tabs: const [
-            Tab(text: 'À venir'),
-            Tab(text: 'Passés'),
-            Tab(text: 'Annulés'),
+            Tab(text: 'Upcoming'),
+            Tab(text: 'Past'),
+            Tab(text: 'Cancelled'),
           ],
         ),
       ),
-      body: StreamBuilder<List<AppointmentModel>>(
-        stream: _firestoreService.getUserAppointments(user.uid),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Text(
-                  describeError(snapshot.error ?? 'Unknown error'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppTheme.dangerRed),
-                ),
-              ),
-            );
-          }
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 920),
+          child: StreamBuilder<List<AppointmentModel>>(
+            stream: _firestoreService.getUserAppointments(user.uid),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Text(
+                      describeError(snapshot.error ?? 'Unknown error'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: AppTheme.dangerRed),
+                    ),
+                  ),
+                );
+              }
 
-          final appts = snapshot.data ?? [];
-          final now = DateTime.now();
+              final appts = snapshot.data ?? [];
+              final now = DateTime.now();
 
-          // Categorize into the 3 tabs per F-25
-          final upcoming = appts
-              .where((a) => !a.isCancelled && a.date.isAfter(now))
-              .toList()
-            ..sort((a, b) => a.date.compareTo(b.date)); // chronological
+              // Categorize into the 3 tabs per F-25
+              final upcoming =
+                  appts
+                      .where((a) => !a.isCancelled && a.date.isAfter(now))
+                      .toList()
+                    ..sort((a, b) => a.date.compareTo(b.date)); // chronological
 
-          final past = appts
-              .where((a) =>
-                  !a.isCancelled &&
-                  (a.date.isBefore(now) || a.isCompleted || a.isNoShow))
-              .toList()
-            ..sort((a, b) => b.date.compareTo(a.date)); // reverse chronological
+              final past =
+                  appts
+                      .where(
+                        (a) =>
+                            !a.isCancelled &&
+                            (a.date.isBefore(now) ||
+                                a.isCompleted ||
+                                a.isNoShow),
+                      )
+                      .toList()
+                    ..sort(
+                      (a, b) => b.date.compareTo(a.date),
+                    ); // reverse chronological
 
-          final cancelled = appts.where((a) => a.isCancelled).toList()
-            ..sort((a, b) => b.date.compareTo(a.date));
+              final cancelled = appts.where((a) => a.isCancelled).toList()
+                ..sort((a, b) => b.date.compareTo(a.date));
 
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              _buildAppointmentList(upcoming, isUpcoming: true),
-              _buildAppointmentList(past),
-              _buildAppointmentList(cancelled),
-            ],
-          );
-        },
+              return TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildAppointmentList(upcoming, isUpcoming: true),
+                  _buildAppointmentList(past),
+                  _buildAppointmentList(cancelled),
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildAppointmentList(List<AppointmentModel> items,
-      {bool isUpcoming = false}) {
+  Widget _buildAppointmentList(
+    List<AppointmentModel> items, {
+    bool isUpcoming = false,
+  }) {
     if (items.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.event_busy_rounded,
-                size: 64, color: Colors.grey.shade400),
+            Icon(
+              Icons.event_busy_rounded,
+              size: 64,
+              color: Colors.grey.shade400,
+            ),
             const SizedBox(height: 12),
             const Text(
-              'Aucun rendez-vous dans cette section.',
+              'No appointments in this section yet.',
               style: TextStyle(color: AppTheme.textMuted, fontSize: 16),
             ),
           ],
@@ -199,80 +221,102 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
 
         return Card(
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  backgroundColor: (appt.isCancelled
-                          ? AppTheme.dangerRed
-                          : AppTheme.primaryBlue)
-                      .withValues(alpha: 0.1),
-                  child: Icon(
-                    appt.isCancelled
-                        ? Icons.cancel_outlined
-                        : Icons.calendar_today_rounded,
-                    color: appt.isCancelled
-                        ? AppTheme.dangerRed
-                        : AppTheme.primaryBlue,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundColor:
+                          (appt.isCancelled
+                                  ? AppTheme.dangerRed
+                                  : AppTheme.primaryBlue)
+                              .withValues(alpha: 0.1),
+                      child: Icon(
+                        appt.isCancelled
+                            ? Icons.event_busy_outlined
+                            : Icons.calendar_today_rounded,
+                        color: appt.isCancelled
+                            ? AppTheme.dangerRed
+                            : AppTheme.primaryBlue,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(title,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700, fontSize: 15)),
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                            ),
                           ),
                           if (appt.specialty.isNotEmpty &&
                               appt.specialty != 'General')
-                            Container(
-                              margin: const EdgeInsets.only(left: 6),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppTheme.primaryBlue.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                appt.specialty,
-                                style: const TextStyle(
-                                    fontSize: 11,
-                                    color: AppTheme.primaryBlue,
-                                    fontWeight: FontWeight.w600),
+                            Text(
+                              appt.specialty,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppTheme.primaryBlue,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.schedule_rounded,
+                      size: 18,
+                      color: AppTheme.textMuted,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
                         DateFormat.yMMMMEEEEd().add_jm().format(appt.date),
                         style: const TextStyle(
-                            fontSize: 13, color: AppTheme.textMuted),
-                      ),
-                      if (appt.reason.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Text(
-                            'Motif : ${appt.reason}',
-                            style: const TextStyle(
-                                fontSize: 12, fontStyle: FontStyle.italic),
-                          ),
+                          fontSize: 13,
+                          color: AppTheme.textMuted,
                         ),
-                    ],
-                  ),
+                      ),
+                    ),
+                  ],
                 ),
-                if (canCancel)
-                  IconButton(
-                    icon: const Icon(Icons.cancel_outlined,
-                        color: AppTheme.dangerRed),
-                    tooltip: 'Annuler ce rendez-vous',
-                    onPressed: () => _cancelAppointment(appt),
+                if (appt.reason.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Reason: ${appt.reason}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.textMuted,
+                    ),
                   ),
+                ],
+                if (canCancel) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => _cancelAppointment(appt),
+                      icon: const Icon(Icons.event_busy_outlined, size: 18),
+                      label: const Text('Cancel appointment'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.dangerRed,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

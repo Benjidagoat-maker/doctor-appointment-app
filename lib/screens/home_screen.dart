@@ -1,5 +1,6 @@
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
+
 import '../models/doctor_model.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
@@ -7,9 +8,7 @@ import '../services/realtime_db_service.dart';
 import '../services/sql_api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_utils.dart';
-import 'appointments_screen.dart';
 import 'doctor_details_screen.dart';
-import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -27,8 +26,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Created once. Creating the stream inside build() would re-subscribe to
   // Firestore (and flash a spinner) on every keystroke in the search box.
-  late final Stream<List<DoctorModel>> _doctorsStream =
-      _firestoreService.getDoctors();
+  late final Stream<List<DoctorModel>> _doctorsStream = _firestoreService
+      .getDoctors();
 
   String _searchQuery = '';
   String _selectedSpecialty = 'All';
@@ -50,8 +49,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showSqlRecordsSheet(BuildContext context) {
     // One fetch per opening - not one per rebuild while the sheet is dragged.
-    final recordsFuture = _sqlService
-        .fetchSqlMedicalRecords(_authService.currentUser?.uid ?? 'guest');
+    final recordsFuture = _sqlService.fetchSqlMedicalRecords(
+      _authService.currentUser?.uid ?? 'guest',
+    );
 
     showModalBottomSheet(
       context: context,
@@ -87,11 +87,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 16),
                       Row(
                         children: [
-                          const Icon(Icons.storage_rounded,
-                              color: AppTheme.primaryBlue),
+                          const Icon(
+                            Icons.storage_rounded,
+                            color: AppTheme.primaryBlue,
+                          ),
                           const SizedBox(width: 8),
-                          Text('SQL Medical Records',
-                              style: Theme.of(context).textTheme.titleLarge),
+                          Text(
+                            'SQL Medical Records',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
                         ],
                       ),
                       Text(
@@ -103,10 +107,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 16),
                       if (snapshot.connectionState == ConnectionState.waiting)
                         const Expanded(
-                            child: Center(child: CircularProgressIndicator()))
+                          child: Center(child: CircularProgressIndicator()),
+                        )
                       else if (!snapshot.hasData || snapshot.data!.isEmpty)
                         const Expanded(
-                            child: Center(child: Text('No medical records found.')))
+                          child: Center(
+                            child: Text('No medical records found.'),
+                          ),
+                        )
                       else
                         Expanded(
                           child: ListView.separated(
@@ -120,13 +128,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: ListTile(
                                   leading: const CircleAvatar(
                                     backgroundColor: Color(0xFFEFF6FF),
-                                    child: Icon(Icons.folder_shared_outlined,
-                                        color: AppTheme.primaryBlue),
+                                    child: Icon(
+                                      Icons.folder_shared_outlined,
+                                      color: AppTheme.primaryBlue,
+                                    ),
                                   ),
                                   title: Text(
                                     item['diagnosis'] ?? 'Medical Checkup',
                                     style: const TextStyle(
-                                        fontWeight: FontWeight.w600),
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                   subtitle: Text(
                                     '${item['doctor']} • ${item['date']}\n${item['source']}',
@@ -136,8 +147,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                     label: Text(
                                       item['status'] ?? 'Active',
                                       style: const TextStyle(
-                                          fontSize: 11,
-                                          color: AppTheme.successGreen),
+                                        fontSize: 11,
+                                        color: AppTheme.successGreen,
+                                      ),
                                     ),
                                     backgroundColor: AppTheme.successGreen
                                         .withValues(alpha: 0.1),
@@ -158,247 +170,297 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _signOut() async {
-    final nav = Navigator.of(context);
-    await _authService.signOut();
-    nav.pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Find Your Doctor'),
+        title: const Text('Doctor Care'),
         actions: [
           IconButton(
             tooltip: 'View SQL Connected Records',
             icon: const Icon(Icons.storage_outlined),
             onPressed: () => _showSqlRecordsSheet(context),
           ),
-          IconButton(
-            tooltip: 'My Appointments',
-            icon: const Icon(Icons.calendar_month_outlined),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AppointmentsScreen()),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Sign Out',
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: _signOut,
-          ),
         ],
       ),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-            color: Colors.white,
-            child: TextField(
-              controller: _searchController,
-              onChanged: (val) =>
-                  setState(() => _searchQuery = val.trim().toLowerCase()),
-              decoration: InputDecoration(
-                hintText: 'Search by doctor name, specialty or phone...',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        tooltip: 'Clear',
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1120),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Find the right care for you',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Browse trusted doctors and book a time that works for you.',
+                      style: TextStyle(color: AppTheme.textMuted),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-            child: Row(
-              children: _specialties.map((spec) {
-                final isSelected = _selectedSpecialty == spec;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: FilterChip(
-                    label: Text(spec),
-                    selected: isSelected,
-                    selectedColor: AppTheme.v22ElectricBlue,
-                    backgroundColor: Colors.white,
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : AppTheme.textDark,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      fontSize: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      side: BorderSide(
-                        color: isSelected
-                            ? AppTheme.v22ElectricBlue
-                            : const Color(0xFFE2E8F0),
-                      ),
-                    ),
-                    onSelected: (_) => setState(() => _selectedSpecialty = spec),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (val) =>
+                      setState(() => _searchQuery = val.trim().toLowerCase()),
+                  decoration: InputDecoration(
+                    hintText: 'Search doctors or specialties',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            tooltip: 'Clear search',
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
                   ),
-                );
-              }).toList(),
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder<List<DoctorModel>>(
-              stream: _doctorsStream,
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(describeError(snapshot.error!),
-                          textAlign: TextAlign.center),
-                    ),
-                  );
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final filtered = snapshot.data!.where((doc) {
-                  final matchesQuery = doc.name.toLowerCase().contains(_searchQuery) ||
-                      doc.specialty.toLowerCase().contains(_searchQuery) ||
-                      doc.phone.toLowerCase().contains(_searchQuery);
-                  final matchesSpecialty = _selectedSpecialty == 'All' ||
-                      doc.specialty.toLowerCase() == _selectedSpecialty.toLowerCase();
-                  return matchesQuery && matchesSpecialty;
-                }).toList();
-
-                if (filtered.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.search_off_rounded,
-                            size: 64, color: Colors.grey.shade400),
-                        const SizedBox(height: 12),
-                        Text(
-                          _searchQuery.isEmpty
-                              ? 'No doctors registered yet.'
-                              : 'No matching doctors found.',
-                          style: const TextStyle(color: AppTheme.textMuted),
+                ),
+              ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 4,
+                ),
+                child: Row(
+                  children: _specialties.map((spec) {
+                    final isSelected = _selectedSpecialty == spec;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(spec),
+                        selected: isSelected,
+                        showCheckmark: false,
+                        selectedColor: AppTheme.primaryBlue,
+                        backgroundColor: Colors.white,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : AppTheme.textDark,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
                         ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.separated(
-                  padding: const EdgeInsets.all(16.0),
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final doc = filtered[index];
-                    return Card(
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => DoctorDetailsScreen(doctor: doc)),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Row(
-                            children: [
-                              Stack(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 28,
-                                    backgroundColor: AppTheme.primaryBlue
-                                        .withValues(alpha: 0.12),
-                                    child: Text(
-                                      doc.name.isNotEmpty
-                                          ? doc.name[0].toUpperCase()
-                                          : 'D',
-                                      style: const TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppTheme.primaryBlue,
-                                      ),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    bottom: 0,
-                                    right: 0,
-                                    child: _PresenceDot(
-                                      doctorId: doc.id,
-                                      fallbackOnline: doc.available,
-                                      service: _realtimeDb,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(doc.name,
-                                        style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w700)),
-                                    const SizedBox(height: 4),
-                                    Text(doc.specialty,
-                                        style: const TextStyle(
-                                            fontSize: 13,
-                                            color: AppTheme.primaryBlue,
-                                            fontWeight: FontWeight.w500)),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.phone_outlined,
-                                            size: 14, color: AppTheme.textMuted),
-                                        const SizedBox(width: 4),
-                                        Text(doc.phone,
-                                            style: const TextStyle(
-                                                fontSize: 12,
-                                                color: AppTheme.textMuted)),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: (doc.available
-                                          ? AppTheme.successGreen
-                                          : AppTheme.dangerRed)
-                                      .withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  doc.available ? 'Available' : 'Unavailable',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: doc.available
-                                        ? AppTheme.successGreen
-                                        : AppTheme.dangerRed,
-                                  ),
-                                ),
-                              ),
-                            ],
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: isSelected
+                                ? AppTheme.primaryBlue
+                                : const Color(0xFFDCE7E4),
                           ),
                         ),
+                        onSelected: (_) =>
+                            setState(() => _selectedSpecialty = spec),
                       ),
                     );
+                  }).toList(),
+                ),
+              ),
+              Expanded(
+                child: StreamBuilder<List<DoctorModel>>(
+                  stream: _doctorsStream,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            describeError(snapshot.error!),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
+                    }
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final filtered = snapshot.data!.where((doc) {
+                      final matchesQuery =
+                          doc.name.toLowerCase().contains(_searchQuery) ||
+                          doc.specialty.toLowerCase().contains(_searchQuery) ||
+                          doc.phone.toLowerCase().contains(_searchQuery);
+                      final matchesSpecialty =
+                          _selectedSpecialty == 'All' ||
+                          doc.specialty.toLowerCase() ==
+                              _selectedSpecialty.toLowerCase();
+                      return matchesQuery && matchesSpecialty;
+                    }).toList();
+
+                    if (filtered.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.search_off_rounded,
+                              size: 56,
+                              color: Colors.grey.shade400,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _searchQuery.isEmpty
+                                  ? 'No doctors registered yet.'
+                                  : 'No matching doctors found.',
+                              style: const TextStyle(color: AppTheme.textMuted),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth >= 740) {
+                          return GridView.builder(
+                            padding: const EdgeInsets.all(20),
+                            gridDelegate:
+                                const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 560,
+                                  mainAxisExtent: 134,
+                                  crossAxisSpacing: 14,
+                                  mainAxisSpacing: 14,
+                                ),
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) =>
+                                _doctorCard(context, filtered[index]),
+                          );
+                        }
+                        return ListView.separated(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (context, index) =>
+                              _doctorCard(context, filtered[index]),
+                        );
+                      },
+                    );
                   },
-                );
-              },
-            ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _doctorCard(BuildContext context, DoctorModel doctor) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DoctorDetailsScreen(doctor: doctor),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 26,
+                    backgroundColor: AppTheme.primaryBlue.withValues(
+                      alpha: 0.12,
+                    ),
+                    backgroundImage: doctor.avatarUrl.isNotEmpty
+                        ? NetworkImage(doctor.avatarUrl)
+                        : null,
+                    child: doctor.avatarUrl.isEmpty
+                        ? Text(
+                            doctor.name.isNotEmpty
+                                ? doctor.name[0].toUpperCase()
+                                : 'D',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primaryBlue,
+                            ),
+                          )
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: _PresenceDot(
+                      doctorId: doctor.id,
+                      fallbackOnline: doctor.available,
+                      service: _realtimeDb,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      doctor.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      doctor.specialty,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.primaryBlue,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      doctor.phone,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 76,
+                child: FilledButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DoctorDetailsScreen(doctor: doctor),
+                    ),
+                  ),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  child: Text(doctor.active ? 'Book' : 'View'),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -422,8 +484,8 @@ class _PresenceDot extends StatefulWidget {
 }
 
 class _PresenceDotState extends State<_PresenceDot> {
-  late final Stream<DatabaseEvent> _stream =
-      widget.service.getDoctorLivePresence(widget.doctorId);
+  late final Stream<DatabaseEvent> _stream = widget.service
+      .getDoctorLivePresence(widget.doctorId);
 
   @override
   Widget build(BuildContext context) {

@@ -2,26 +2,26 @@ import 'package:flutter/material.dart';
 
 class AppTheme {
   // Brand Colors
-  static const Color primaryBlue = Color(0xFF0F67FE);
-  static const Color primaryDark = Color(0xFF0A3C9E);
-  static const Color accentTeal = Color(0xFF00C9A7);
-  static const Color backgroundLight = Color(0xFFF8FAFC);
+  static const Color primaryBlue = Color(0xFF117C72);
+  static const Color primaryDark = Color(0xFF0C625B);
+  static const Color accentTeal = Color(0xFF54B7AA);
+  static const Color backgroundLight = Color(0xFFF2F7F6);
   static const Color surfaceWhite = Colors.white;
-  static const Color textDark = Color(0xFF0F172A);
-  static const Color textMuted = Color(0xFF64748B);
-  static const Color dangerRed = Color(0xFFEF4444);
-  static const Color successGreen = Color(0xFF10B981);
+  static const Color textDark = Color(0xFF172A28);
+  static const Color textMuted = Color(0xFF687A77);
+  static const Color dangerRed = Color(0xFFB54742);
+  static const Color successGreen = Color(0xFF26866E);
   static const Color cardShadow = Color(0x0C000000);
 
   // ============================================================
   // Dashboard V22 Design System Tokens (Glowing Electric Blue & Glassmorphism)
   // ============================================================
-  static const Color v22ElectricBlue = Color(0xFF0066FF);
-  static const Color v22ElectricCyan = Color(0xFF00D2FF);
-  static const Color v22DeepSlate = Color(0xFF0B192C);
-  static const Color v22GlassBackground = Color(0xE6FFFFFF); // 90% opacity frosted glass
-  static const Color v22GlassBorder = Color(0x2E0066FF);     // subtle electric blue rim
-  static const Color v22GlowShadow = Color(0x330066FF);
+  static const Color v22ElectricBlue = primaryBlue;
+  static const Color v22ElectricCyan = accentTeal;
+  static const Color v22DeepSlate = textDark;
+  static const Color v22GlassBackground = Color(0xE6FFFFFF);
+  static const Color v22GlassBorder = Color(0x33117C72);
+  static const Color v22GlowShadow = Color(0x33117C72);
 
   static const LinearGradient v22ElectricGradient = LinearGradient(
     colors: [v22ElectricBlue, v22ElectricCyan],
@@ -68,19 +68,19 @@ class AppTheme {
       useMaterial3: true,
       scaffoldBackgroundColor: backgroundLight,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: v22ElectricBlue,
-        primary: v22ElectricBlue,
-        secondary: v22ElectricCyan,
+        seedColor: primaryBlue,
+        primary: primaryBlue,
+        secondary: accentTeal,
         surface: surfaceWhite,
         error: dangerRed,
       ),
       appBarTheme: const AppBarTheme(
         elevation: 0,
-        backgroundColor: surfaceWhite,
+        backgroundColor: backgroundLight,
         foregroundColor: textDark,
         centerTitle: false,
         titleTextStyle: TextStyle(
-          fontSize: 19,
+          fontSize: 20,
           fontWeight: FontWeight.w700,
           color: textDark,
         ),
@@ -88,28 +88,28 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(18),
           borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: Color(0xFFDCE7E4)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: v22ElectricBlue, width: 1.5),
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: primaryBlue, width: 1.5),
         ),
         labelStyle: const TextStyle(color: textMuted),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           elevation: 0,
-          backgroundColor: v22ElectricBlue,
+          backgroundColor: primaryBlue,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
           textStyle: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
@@ -117,9 +117,13 @@ class AppTheme {
         ),
       ),
       cardTheme: CardThemeData(
-        elevation: 2,
+        elevation: 0,
         shadowColor: cardShadow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: Color(0xFFDCE7E4)),
+        ),
         color: surfaceWhite,
       ),
     );
