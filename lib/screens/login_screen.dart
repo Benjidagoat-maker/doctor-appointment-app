@@ -1,11 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_utils.dart';
 import 'admin_dashboard.dart';
 import 'email_verification_screen.dart';
-import 'home_screen.dart';
+import 'patient_shell.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -30,9 +31,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showError(String message, {Color color = AppTheme.dangerRed}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
   Future<void> _login() async {
@@ -52,7 +52,8 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     try {
       final isSuperAdmin =
-          email.trim().toLowerCase() == AuthService.superAdminEmail.toLowerCase();
+          email.trim().toLowerCase() ==
+          AuthService.superAdminEmail.toLowerCase();
 
       UserCredential creds;
       try {
@@ -82,7 +83,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       final next = (profile.role.toLowerCase() == 'admin' || isSuperAdmin)
           ? const AdminDashboard()
-          : const HomeScreen();
+          : const PatientShell();
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => next),
@@ -106,7 +107,8 @@ class _LoginScreenState extends State<LoginScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text(
-            'Email not verified. Check your inbox or tap to resend.'),
+          'Email not verified. Check your inbox or tap to resend.',
+        ),
         backgroundColor: Colors.orange.shade700,
         action: SnackBarAction(
           label: 'Resend',
@@ -114,15 +116,18 @@ class _LoginScreenState extends State<LoginScreen> {
           onPressed: () async {
             // Temporarily sign in to resend the email, then sign out again.
             try {
-              await FirebaseAuth.instance
-                  .signInWithEmailAndPassword(email: email, password: password);
+              await FirebaseAuth.instance.signInWithEmailAndPassword(
+                email: email,
+                password: password,
+              );
               await _auth.resendVerificationEmail();
               await _auth.signOut();
               if (!mounted) return;
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
-                    builder: (_) => EmailVerificationScreen(email: email)),
+                  builder: (_) => EmailVerificationScreen(email: email),
+                ),
               );
             } catch (e) {
               if (mounted) _showError(describeError(e));
@@ -142,8 +147,10 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await _auth.resetPassword(email);
       if (!mounted) return;
-      _showError('If an account exists for $email, a reset link was sent.',
-          color: AppTheme.successGreen);
+      _showError(
+        'If an account exists for $email, a reset link was sent.',
+        color: AppTheme.successGreen,
+      );
     } catch (e) {
       if (mounted) _showError(describeError(e));
     }
@@ -155,7 +162,10 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 32.0,
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 440),
               child: Column(
@@ -225,7 +235,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                       : Icons.visibility,
                                 ),
                                 onPressed: () => setState(
-                                    () => _obscurePassword = !_obscurePassword),
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
                               ),
                             ),
                           ),
@@ -266,7 +277,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextButton(
                         onPressed: () => Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const SignupScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const SignupScreen(),
+                          ),
                         ),
                         child: const Text(
                           'Register now',

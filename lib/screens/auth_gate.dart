@@ -1,9 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
 import '../services/auth_service.dart';
 import 'admin_dashboard.dart';
-import 'home_screen.dart';
 import 'login_screen.dart';
+import 'patient_shell.dart';
 
 /// Restores the previous session on app start with Strict Admin Gatekeeping:
 /// verified admin -> Admin Dashboard V22, verified patient -> Home, otherwise -> Login.
@@ -24,7 +25,8 @@ class _AuthGateState extends State<AuthGate> {
       final user = await FirebaseAuth.instance.authStateChanges().first;
       if (user == null) return const LoginScreen();
 
-      final isSuperAdmin = (user.email ?? '').trim().toLowerCase() ==
+      final isSuperAdmin =
+          (user.email ?? '').trim().toLowerCase() ==
           AuthService.superAdminEmail.toLowerCase();
 
       if (!isSuperAdmin && !user.emailVerified) return const LoginScreen();
@@ -33,9 +35,9 @@ class _AuthGateState extends State<AuthGate> {
         final profile = await AuthService().loadOrCreateProfile(user);
         return (profile.isAdmin || isSuperAdmin)
             ? const AdminDashboard()
-            : const HomeScreen();
+            : const PatientShell();
       } catch (_) {
-        return isSuperAdmin ? const AdminDashboard() : const HomeScreen();
+        return isSuperAdmin ? const AdminDashboard() : const PatientShell();
       }
     } catch (_) {
       // Can't load the profile (offline, rules...): fall back to a clean login.
@@ -49,11 +51,7 @@ class _AuthGateState extends State<AuthGate> {
       future: _destination,
       builder: (context, snapshot) {
         if (snapshot.hasData) return snapshot.data!;
-        return const Scaffold(
-          body: Center(
-            child: CircularProgressIndicator(),
-          ),
-        );
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
       },
     );
   }

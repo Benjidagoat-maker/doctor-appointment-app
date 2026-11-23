@@ -10,6 +10,7 @@ import 'screens/auth_gate.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
+import 'widgets/app_update_gate.dart';
 
 /// Public reCAPTCHA Enterprise site key (safe to ship). Override per
 /// environment with `--dart-define=RECAPTCHA_SITE_KEY=...`.
@@ -25,8 +26,9 @@ Future<void> main() async {
   // Must run before the first Firestore call. Auto-detect falls back to HTTP
   // long-polling when the WebChannel stream is blocked (proxies, ad-blockers,
   // some networks) - a classic cause of "client is offline" on web.
-  FirebaseFirestore.instance.settings =
-      const Settings(webExperimentalAutoDetectLongPolling: true);
+  FirebaseFirestore.instance.settings = const Settings(
+    webExperimentalAutoDetectLongPolling: true,
+  );
 
   await _activateAppCheck();
   runApp(const MyApp());
@@ -60,15 +62,11 @@ class MyApp extends StatelessWidget {
       title: 'Doctor Care',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const AuthGate(),
-      routes: {
-        '/login': (_) => const LoginScreen(),
-      },
+      home: const AppUpdateGate(child: AuthGate()),
+      routes: {'/login': (_) => const LoginScreen()},
       onGenerateRoute: (settings) {
         if (settings.name == '/admin') {
-          return MaterialPageRoute(
-            builder: (_) => const _AdminRouteGuard(),
-          );
+          return MaterialPageRoute(builder: (_) => const _AdminRouteGuard());
         }
         return null;
       },
@@ -88,7 +86,8 @@ class _AdminRouteGuard extends StatelessWidget {
       return const LoginScreen();
     }
 
-    final isSuperAdmin = (user.email ?? '').trim().toLowerCase() ==
+    final isSuperAdmin =
+        (user.email ?? '').trim().toLowerCase() ==
         AuthService.superAdminEmail.toLowerCase();
 
     if (!isSuperAdmin && !user.emailVerified) {

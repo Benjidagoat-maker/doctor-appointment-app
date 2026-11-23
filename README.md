@@ -29,6 +29,7 @@ The app uses Firebase Authentication for sign-in, Cloud Firestore for doctors an
 - Search the doctor directory by name, specialty, or phone number.
 - View doctor availability and live presence when Realtime Database is configured.
 - Choose a date and time to book an appointment, then view or cancel bookings.
+- Get a dismissible in-app notice when a newer release is available.
 - View SQL-backed medical records when an API is configured; otherwise, see sample demo data.
 
 ### Administrators
@@ -127,6 +128,12 @@ firebase deploy --only firestore:rules,database
 ```
 
 The GitHub Actions workflow in `.github/workflows/deploy.yml` runs `flutter analyze` and `flutter test` and includes a Firebase Hosting deployment job. Configure the required `FIREBASE_SERVICE_ACCOUNT` repository secret before relying on automated deployment.
+
+### App update notices
+
+The app checks `web/app-update.json` at launch. When publishing a newer release, set the same new version and incremented build number in both `pubspec.yaml` and the manifest, add concise `releaseNotes`, and point `downloadUrl` to the page hosting the platform installers. The manifest is deployed with Firebase Hosting and is served without caching so installed apps see the latest release metadata. The notice can be dismissed; selecting **Get update** opens the configured page.
+
+The hosting workflow deploys the web app and does not build or sign Android/Windows installers. Publish those installers separately and update the manifest URL to a page that actually contains the downloads before announcing a native-app update.
 
 ## Tests and analysis
 
