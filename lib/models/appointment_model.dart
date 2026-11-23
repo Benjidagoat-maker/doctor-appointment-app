@@ -6,7 +6,7 @@ class AppointmentModel {
   final String patientName;
   final String patientEmail;
   final String doctorId;
-  final String doctorName;
+  final String doctorName; // denormalised so lists don't need a second query
   final String specialty;
   final DateTime date; // start time (UTC)
   final int durationMin;
@@ -39,6 +39,7 @@ class AppointmentModel {
   bool get isConfirmed => status.toLowerCase() == 'confirmed';
   bool get isCompleted => status.toLowerCase() == 'completed';
   bool get isNoShow => status.toLowerCase() == 'no_show';
+  bool get isPending => status.toLowerCase() == 'pending';
 
   /// Deterministic slot key for the slot lock document: yyyyMMddHHmm in UTC
   static String formatSlotKey(DateTime dateTime) {
@@ -53,9 +54,14 @@ class AppointmentModel {
 
   String get slotKey => formatSlotKey(date);
 
+  /// Accepts a Firestore [Timestamp], a [DateTime], or a String without throwing.
   static DateTime parseDate(dynamic value) {
     if (value is Timestamp) return value.toDate();
     if (value is DateTime) return value;
+    if (value is String) {
+      final parsed = DateTime.tryParse(value);
+      if (parsed != null) return parsed;
+    }
     return DateTime.now();
   }
 
@@ -72,7 +78,7 @@ class AppointmentModel {
   }
 
   factory AppointmentModel.fromMap(Map<String, dynamic> map, String docId) {
-    final parsedDate = parseDate(map['date']);
+    final parsedDate = parseDate(map['date'] ?? map['appointment_date']);
     final int dur = (map['durationMin'] as num?)?.toInt() ?? 30;
     final parsedEndAt = map['endAt'] != null
         ? parseDate(map['endAt'])
@@ -80,18 +86,18 @@ class AppointmentModel {
 
     return AppointmentModel(
       id: docId,
-      userId: map['userId'] ?? '',
-      patientName: map['patientName'] ?? '',
-      patientEmail: map['patientEmail'] ?? '',
-      doctorId: map['doctorId'] ?? '',
-      doctorName: map['doctorName'] ?? '',
-      specialty: map['specialty'] ?? 'General',
+      userId: map['userId'] ?? map['user_id'] ?? '',
+      patientName: map['patientName'] ?? map['patient_name'] ?? '',
+      patientEmail: map['patientEmail'] ?? map['patient_email'] ?? '',
+      doctorId: map['doctorId'] ?? map['doctor_id'] ?? '',
+      doctorName: map['doctorName'] ?? map['doctor_name'] ?? '',
+      specialty: map['specialty'] ?? map['specialty_name'] ?? 'General',
       date: parsedDate,
       durationMin: dur,
       endAt: parsedEndAt,
       status: normalizeStatus(map['status']),
       reason: map['reason'] ?? '',
-      createdAt: parseDate(map['createdAt']),
+      createdAt: parseDate(map['createdAt'] ?? map['created_at']),
       updatedAt: map['updatedAt'] != null ? parseDate(map['updatedAt']) : null,
       cancelledBy: map['cancelledBy'] as String?,
     );

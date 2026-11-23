@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/appointment_model.dart';
 import '../models/doctor_model.dart';
+import '../models/user_model.dart';
 import '../utils/app_utils.dart';
 
 class FirestoreService {
@@ -9,6 +10,34 @@ class FirestoreService {
   final FirebaseFirestore? _dbOverride;
   FirebaseFirestore get _db => _dbOverride ?? FirebaseFirestore.instance;
 
+  // ============================================================
+  // USERS MANAGEMENT (Admin-Only Live Monitor & Role Toggling)
+  // ============================================================
+  Stream<List<UserModel>> getAllUsers() {
+    return _db.collection('users').snapshots().map((snapshot) {
+      final list = snapshot.docs
+          .map((doc) => UserModel.fromMap(doc.data(), doc.id))
+          .toList();
+      // Sort online users first, then alphabetically by name
+      list.sort((a, b) {
+        if (a.isOnline != b.isOnline) {
+          return a.isOnline ? -1 : 1;
+        }
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+      return list;
+    });
+  }
+
+  Future<void> toggleUserRole(String uid, String currentRole) async {
+    final targetRole =
+        UserModel.normalizeRole(currentRole) == 'admin' ? 'user' : 'admin';
+    await _db.collection('users').doc(uid).update({'role': targetRole});
+  }
+
+  // ============================================================
+  // DOCTORS & SPECIALTIES MANAGEMENT
+  // ============================================================
   Stream<List<DoctorModel>> getDoctors() =>
       _db.collection('doctors').snapshots().map((s) {
         final list =
@@ -40,6 +69,10 @@ class FirestoreService {
       .collection('bookedSlots')
       .snapshots()
       .map((s) => s.docs.map((d) => d.id).toSet());
+
+  // ============================================================
+  // APPOINTMENTS MANAGEMENT
+  // ============================================================
 
   /// Atomic booking implementation per Section 6.3 of the Cahier des charges.
   /// Uses a Firestore batch transaction locking doctors/{doctorId}/bookedSlots/{slotKey}
@@ -143,6 +176,10 @@ class FirestoreService {
     }
   }
 
+  /// Admin manual appointment creation
+  Future<void> addAppointment(AppointmentModel appt) =>
+      _db.collection('appointments').add(appt.toMap());
+
   /// Cancels an appointment.
   /// If patient is cancelling, enforces the 48-hour cancellation rule (Section 6.7 / F-24).
   /// Releases doctors/{doctorId}/bookedSlots/{slotKey} atomically.
@@ -151,7 +188,8 @@ class FirestoreService {
     required String cancelledByUid,
     bool isAdminOrDoctor = false,
   }) async {
-    final apptDoc = await _db.collection('appointments').doc(appointmentId).get();
+    final apptDoc =
+        await _db.collection('appointments').doc(appointmentId).get();
     if (!apptDoc.exists) {
       throw const AppException('Appointment not found.');
     }
@@ -191,7 +229,7 @@ class FirestoreService {
     await batch.commit();
   }
 
-  /// Update appointment status (for doctor / admin: completed, no_show)
+  /// Admin / Doctor update appointment status (Confirm/Cancel/Completed/Pending/no_show)
   Future<void> updateAppointmentStatus({
     required String appointmentId,
     required String newStatus,
@@ -202,6 +240,18 @@ class FirestoreService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
+
+  /// Admin reschedule appointment date
+  Future<void> rescheduleAppointment(
+          String appointmentId, DateTime newDate) =>
+      _db
+          .collection('appointments')
+          .doc(appointmentId)
+          .update({'date': Timestamp.fromDate(newDate.toUtc())});
+
+  /// Admin delete appointment record
+  Future<void> deleteAppointment(String appointmentId) =>
+      _db.collection('appointments').doc(appointmentId).delete();
 
   /// Newest first. Sorted on client side.
   Stream<List<AppointmentModel>> getUserAppointments(String userId) => _db

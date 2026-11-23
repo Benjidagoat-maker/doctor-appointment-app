@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/otp_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_utils.dart';
 import 'email_verification_screen.dart';
+import 'otp_verification_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -67,13 +69,35 @@ class _SignupScreenState extends State<SignupScreen> {
     try {
       await _auth.signUp(name: name, email: email, password: password);
       if (!mounted) return;
-      // Go to the email verification waiting screen
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => EmailVerificationScreen(email: email),
-        ),
-      );
+
+      final user = _auth.currentUser;
+      if (user != null) {
+        // Step 2: Trigger OTP verification
+        final otpCode = await OtpService().sendOtp(
+          email: email,
+          userId: user.uid,
+        );
+        if (!mounted) return;
+
+        // Step 3: Present sleek 6-digit OTP verification screen
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OtpVerificationScreen(
+              user: user,
+              initialOtpCode: otpCode,
+            ),
+          ),
+        );
+      } else {
+        // Go to the email verification waiting screen if currentUser is not yet cached
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => EmailVerificationScreen(email: email),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

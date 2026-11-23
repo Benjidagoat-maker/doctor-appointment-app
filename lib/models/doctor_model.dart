@@ -105,6 +105,16 @@ class DoctorModel {
           (map['daysOff'] as List).map((e) => e.toString()).toList();
     }
 
+    int parsedExp = 0;
+    final rawExp = map['experienceYears'] ?? map['experience_years'];
+    if (rawExp is int) {
+      parsedExp = rawExp;
+    } else if (rawExp is num) {
+      parsedExp = rawExp.toInt();
+    } else if (rawExp is String) {
+      parsedExp = int.tryParse(rawExp) ?? 0;
+    }
+
     final dynamic rawActive = map['active'] ?? map['available'];
     final bool isActive = rawActive is bool ? rawActive : true;
 
@@ -114,8 +124,8 @@ class DoctorModel {
       specialty: map['specialty'] ?? '',
       phone: map['phone'] ?? '',
       bio: map['bio'] ?? '',
-      experienceYears: (map['experienceYears'] as num?)?.toInt() ?? 0,
-      avatarUrl: map['avatarUrl'] ?? '',
+      experienceYears: parsedExp,
+      avatarUrl: map['avatarUrl'] ?? map['avatar_url'] ?? '',
       clinicAddress: map['clinicAddress'] ?? '',
       active: isActive,
       slotDurationMin: (map['slotDurationMin'] as num?)?.toInt() ?? 30,

@@ -5,7 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
+import 'screens/admin_dashboard.dart';
 import 'screens/auth_gate.dart';
+import 'screens/login_screen.dart';
+import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 
 /// Public reCAPTCHA Enterprise site key (safe to ship). Override per
@@ -58,6 +61,58 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: const AuthGate(),
+      routes: {
+        '/login': (_) => const LoginScreen(),
+      },
+      onGenerateRoute: (settings) {
+        if (settings.name == '/admin') {
+          return MaterialPageRoute(
+            builder: (_) => const _AdminRouteGuard(),
+          );
+        }
+        return null;
+      },
+    );
+  }
+}
+
+/// Strict Guard for route `/admin`:
+/// Checks if current logged-in Firebase user has role === 'admin'
+class _AdminRouteGuard extends StatelessWidget {
+  const _AdminRouteGuard();
+
+  @override
+  Widget build(BuildContext context) {
+    final user = AuthService().currentUser;
+    if (user == null) {
+      return const LoginScreen();
+    }
+
+    final isSuperAdmin = (user.email ?? '').trim().toLowerCase() ==
+        AuthService.superAdminEmail.toLowerCase();
+
+    if (!isSuperAdmin && !user.emailVerified) {
+      return const LoginScreen();
+    }
+
+    if (isSuperAdmin) {
+      return const AdminDashboard();
+    }
+
+    return FutureBuilder(
+      future: AuthService().getUserData(user.uid),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final profile = snapshot.data;
+        if (profile != null && profile.isAdmin) {
+          return const AdminDashboard();
+        }
+        return const LoginScreen();
+      },
     );
   }
 }

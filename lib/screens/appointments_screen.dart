@@ -221,15 +221,33 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 15)),
-                      if (appt.specialty.isNotEmpty)
-                        Text(
-                          appt.specialty,
-                          style: const TextStyle(
-                              fontSize: 12, color: AppTheme.primaryBlue),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(title,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 15)),
+                          ),
+                          if (appt.specialty.isNotEmpty &&
+                              appt.specialty != 'General')
+                            Container(
+                              margin: const EdgeInsets.only(left: 6),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                appt.specialty,
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppTheme.primaryBlue,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                        ],
+                      ),
                       const SizedBox(height: 4),
                       Text(
                         DateFormat.yMMMMEEEEd().add_jm().format(appt.date),

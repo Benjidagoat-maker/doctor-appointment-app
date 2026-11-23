@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/doctor_model.dart';
@@ -29,12 +30,13 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   DateTime? _selectedSlot;
   final TextEditingController _reasonController = TextEditingController();
   bool _isBooking = false;
+  Stream<DatabaseEvent>? _presenceStream;
 
   @override
   void initState() {
     super.initState();
-    // Default to tomorrow or today if early
     _selectedDate = DateTime.now().add(const Duration(days: 1));
+    _presenceStream = _realtimeDb.getDoctorLivePresence(widget.doctor.id);
   }
 
   @override
@@ -207,15 +209,20 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                       radius: 36,
                       backgroundColor:
                           AppTheme.primaryBlue.withValues(alpha: 0.12),
-                      child: Text(
-                        widget.doctor.name.isNotEmpty
-                            ? widget.doctor.name[0].toUpperCase()
-                            : 'D',
-                        style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.primaryBlue),
-                      ),
+                      backgroundImage: widget.doctor.avatarUrl.isNotEmpty
+                          ? NetworkImage(widget.doctor.avatarUrl)
+                          : null,
+                      child: widget.doctor.avatarUrl.isEmpty
+                          ? Text(
+                              widget.doctor.name.isNotEmpty
+                                  ? widget.doctor.name[0].toUpperCase()
+                                  : 'D',
+                              style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.primaryBlue),
+                            )
+                          : null,
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -273,6 +280,84 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+
+            if (widget.doctor.bio.isNotEmpty) ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'About Doctor',
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        widget.doctor.bio,
+                        style: const TextStyle(
+                            fontSize: 13,
+                            color: AppTheme.textMuted,
+                            height: 1.4),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Live Realtime Database Status Badge
+            Card(
+              color: const Color(0xFFF0FDF4),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0, vertical: 12.0),
+                child: Row(
+                  children: [
+                    const Icon(Icons.bolt_rounded,
+                        color: AppTheme.successGreen),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: StreamBuilder<DatabaseEvent>(
+                        stream: _presenceStream,
+                        builder: (context, snapshot) {
+                          final value = snapshot.data?.snapshot.value;
+                          final hasLive =
+                              value is Map && value['isOnline'] != null;
+                          final online =
+                              value is Map && value['isOnline'] == true;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                hasLive
+                                    ? (online
+                                        ? 'Doctor is online now'
+                                        : 'Doctor is currently offline')
+                                    : 'Live status not available',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    color: Color(0xFF166534)),
+                              ),
+                              const Text(
+                                'You can book a slot regardless of live status',
+                                style: TextStyle(
+                                    fontSize: 12, color: Color(0xFF15803D)),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
             const SizedBox(height: 24),
 
             // Date picker row

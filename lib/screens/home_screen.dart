@@ -31,6 +31,16 @@ class _HomeScreenState extends State<HomeScreen> {
       _firestoreService.getDoctors();
 
   String _searchQuery = '';
+  String _selectedSpecialty = 'All';
+  final List<String> _specialties = const [
+    'All',
+    'Cardiology',
+    'Dermatology',
+    'Neurology',
+    'Pediatrics',
+    'Orthopedics',
+    'General Medicine',
+  ];
 
   @override
   void dispose() {
@@ -205,6 +215,38 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+            child: Row(
+              children: _specialties.map((spec) {
+                final isSelected = _selectedSpecialty == spec;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: FilterChip(
+                    label: Text(spec),
+                    selected: isSelected,
+                    selectedColor: AppTheme.v22ElectricBlue,
+                    backgroundColor: Colors.white,
+                    labelStyle: TextStyle(
+                      color: isSelected ? Colors.white : AppTheme.textDark,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: BorderSide(
+                        color: isSelected
+                            ? AppTheme.v22ElectricBlue
+                            : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    onSelected: (_) => setState(() => _selectedSpecialty = spec),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
           Expanded(
             child: StreamBuilder<List<DoctorModel>>(
               stream: _doctorsStream,
@@ -222,9 +264,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final filtered = snapshot.data!.where((doc) {
-                  return doc.name.toLowerCase().contains(_searchQuery) ||
+                  final matchesQuery = doc.name.toLowerCase().contains(_searchQuery) ||
                       doc.specialty.toLowerCase().contains(_searchQuery) ||
                       doc.phone.toLowerCase().contains(_searchQuery);
+                  final matchesSpecialty = _selectedSpecialty == 'All' ||
+                      doc.specialty.toLowerCase() == _selectedSpecialty.toLowerCase();
+                  return matchesQuery && matchesSpecialty;
                 }).toList();
 
                 if (filtered.isEmpty) {

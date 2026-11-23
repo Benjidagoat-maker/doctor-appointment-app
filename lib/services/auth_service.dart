@@ -1,8 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 
 class AuthService {
+  /// Special Bootstrap Super Admin Email
+  static const String superAdminEmail = 'kenjirobenji@gmail.com';
+
   /// Firebase instances are resolved lazily so the service (and the screens
   /// that own one) can be constructed in tests without Firebase initialised.
   AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
@@ -17,13 +21,15 @@ class AuthService {
 
   User? get currentUser => _auth.currentUser;
 
-  /// True only when the user is logged in AND has verified their email.
-  bool get isEmailVerified => _auth.currentUser?.emailVerified ?? false;
+  /// True only when the user is logged in AND has verified their email (or super admin).
+  bool get isEmailVerified {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    final isSuperAdmin = (user.email ?? '').trim().toLowerCase() == superAdminEmail.toLowerCase();
+    return isSuperAdmin || user.emailVerified;
+  }
 
   /// Registers a new user and sends the verification email.
-  /// The email is sent BEFORE the Firestore write so a database problem can
-  /// never leave an account that can't be verified; a missing profile is
-  /// recreated on first login by [loadOrCreateProfile].
   Future<void> signUp({
     required String name,
     required String email,
@@ -35,21 +41,24 @@ class AuthService {
     );
     final user = res.user!;
     await user.updateDisplayName(name);
-    await user.sendEmailVerification();
+    try {
+      await user.sendEmailVerification();
+    } catch (_) {}
     try {
       await createProfile(user, name: name);
     } catch (_) {
-      // Non-fatal, see doc comment above.
+      // Non-fatal: missing profile will be recreated on first login
     }
   }
 
-  /// Logs in. If email is not verified, signs back out and throws an error.
+  /// Logs in. Bypasses email verification check for Super Admin.
   Future<UserCredential> login(String email, String password) async {
     final creds = await _auth.signInWithEmailAndPassword(
       email: email.trim(),
       password: password,
     );
-    if (!creds.user!.emailVerified) {
+    final isSuperAdmin = email.trim().toLowerCase() == superAdminEmail.toLowerCase();
+    if (!isSuperAdmin && !creds.user!.emailVerified) {
       await _auth.signOut();
       throw FirebaseAuthException(
         code: 'email-not-verified',
@@ -71,11 +80,13 @@ class AuthService {
   /// Reload the user object so emailVerified reflects the latest status.
   Future<bool> checkEmailVerified() async {
     await _auth.currentUser?.reload();
-    return _auth.currentUser?.emailVerified ?? false;
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    final isSuperAdmin = (user.email ?? '').trim().toLowerCase() == superAdminEmail.toLowerCase();
+    return isSuperAdmin || user.emailVerified;
   }
 
-  /// Reads the profile. Retries once on `unavailable` (a transient "client is
-  /// offline" is common right after sign-in on web while the connection opens).
+  /// Reads the profile. Retries once on `unavailable`.
   Future<UserModel?> getUserData(String uid) async {
     final ref = _db.collection('users').doc(uid);
     DocumentSnapshot<Map<String, dynamic>> doc;
@@ -83,30 +94,123 @@ class AuthService {
       doc = await ref.get();
     } on FirebaseException catch (e) {
       if (e.code != 'unavailable') rethrow;
-      await Future<void>.delayed(const Duration(seconds: 2));
+      await Future<void>.delayed(const Duration(seconds: 1));
       doc = await ref.get();
+    } catch (e) {
+      return null;
     }
     final data = doc.data();
     if (!doc.exists || data == null) return null;
     return UserModel.fromMap(data, doc.id);
   }
 
-  /// Creates the default (non-admin) profile. Security rules only allow
-  /// role == 'user' here; admins are promoted manually in the console.
+  /// Creates user profile safely. Compliant with both new and legacy Firestore rules.
   Future<UserModel> createProfile(User user, {String? name}) async {
     final email = user.email ?? '';
+    final isSuperAdmin = email.trim().toLowerCase() == superAdminEmail.toLowerCase();
+    final role = isSuperAdmin ? 'admin' : 'user';
+
     final profile = UserModel(
       uid: user.uid,
       name: name ?? user.displayName ?? email.split('@').first,
       email: email,
-      role: 'user',
+      role: role,
+      isOnline: true,
+      lastLogin: DateTime.now(),
+      createdAt: DateTime.now(),
     );
-    await _db.collection('users').doc(user.uid).set(profile.toMap());
+
+    // Try full profile payload first
+    try {
+      await _db.collection('users').doc(user.uid).set(profile.toMap(), SetOptions(merge: true));
+    } catch (_) {
+      // Fallback for legacy deployed rules checking keys().hasOnly(['name', 'email', 'role'])
+      try {
+        await _db.collection('users').doc(user.uid).set({
+          'name': profile.name,
+          'email': profile.email,
+          'role': role,
+        }, SetOptions(merge: true));
+      } catch (_) {
+        // Last-resort fallback for rules requiring the legacy user role
+        try {
+          await _db.collection('users').doc(user.uid).set({
+            'name': profile.name,
+            'email': profile.email,
+            'role': 'user',
+          }, SetOptions(merge: true));
+        } catch (_) {}
+      }
+    }
     return profile;
   }
 
-  Future<UserModel> loadOrCreateProfile(User user) async =>
-      await getUserData(user.uid) ?? await createProfile(user);
+  /// Loads profile or creates one, maintaining admin state and online presence without throwing.
+  Future<UserModel> loadOrCreateProfile(User user) async {
+    final email = user.email ?? '';
+    final isSuperAdmin = email.trim().toLowerCase() == superAdminEmail.toLowerCase();
 
-  Future<void> signOut() => _auth.signOut();
+    UserModel? profile;
+    try {
+      profile = await getUserData(user.uid);
+    } catch (e) {
+      debugPrint('getUserData non-fatal error: $e');
+    }
+
+    if (profile == null) {
+      try {
+        profile = await createProfile(user);
+      } catch (e) {
+        debugPrint('createProfile non-fatal error: $e');
+        profile = UserModel(
+          uid: user.uid,
+          name: user.displayName ?? email.split('@').first,
+          email: email,
+          role: isSuperAdmin ? 'admin' : 'user',
+          isOnline: true,
+          lastLogin: DateTime.now(),
+          createdAt: DateTime.now(),
+        );
+      }
+    }
+
+    // Guarantee Super Admin role in memory and attempt merge in Firestore
+    if (isSuperAdmin) {
+      profile = UserModel(
+        uid: profile.uid,
+        name: profile.name,
+        email: profile.email,
+        role: 'admin',
+        isOnline: true,
+        lastLogin: DateTime.now(),
+        createdAt: profile.createdAt,
+      );
+      try {
+        await _db.collection('users').doc(user.uid).set(
+          {'role': 'admin'},
+          SetOptions(merge: true),
+        );
+      } catch (_) {}
+    } else {
+      // Best-effort online status update
+      try {
+        await _db.collection('users').doc(user.uid).update({
+          'is_online': true,
+          'last_login': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
+    }
+
+    return profile;
+  }
+
+  Future<void> signOut() async {
+    final user = currentUser;
+    if (user != null) {
+      try {
+        await _db.collection('users').doc(user.uid).update({'is_online': false});
+      } catch (_) {}
+    }
+    await _auth.signOut();
+  }
 }
