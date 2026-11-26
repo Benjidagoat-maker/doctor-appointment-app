@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
+  static const Color patientPrimary = Color(0xFF0F766E);
+  static const Color patientBackground = Color(0xFFF3F7F6);
+  static const Color patientInk = Color(0xFF12201F);
+  static const Color patientMuted = Color(0xFF5B6B69);
+  static const Color patientBorder = Color(0xFFDCE6E4);
+  static const Color patientTint = Color(0xFFD9EFEB);
+  static const Color patientDisabled = Color(0xFFEEF2F1);
+
   // Brand Colors
   static const Color primaryBlue = Color(0xFF0F67FE);
   static const Color primaryDark = Color(0xFF0A3C9E);
@@ -19,8 +27,12 @@ class AppTheme {
   static const Color v22ElectricBlue = Color(0xFF0066FF);
   static const Color v22ElectricCyan = Color(0xFF00D2FF);
   static const Color v22DeepSlate = Color(0xFF0B192C);
-  static const Color v22GlassBackground = Color(0xE6FFFFFF); // 90% opacity frosted glass
-  static const Color v22GlassBorder = Color(0x2E0066FF);     // subtle electric blue rim
+  static const Color v22GlassBackground = Color(
+    0xE6FFFFFF,
+  ); // 90% opacity frosted glass
+  static const Color v22GlassBorder = Color(
+    0x2E0066FF,
+  ); // subtle electric blue rim
   static const Color v22GlowShadow = Color(0x330066FF);
 
   static const LinearGradient v22ElectricGradient = LinearGradient(
@@ -30,10 +42,7 @@ class AppTheme {
   );
 
   static const LinearGradient v22GlassGradient = LinearGradient(
-    colors: [
-      Color(0xF0FFFFFF),
-      Color(0xCCF0F7FF),
-    ],
+    colors: [Color(0xF0FFFFFF), Color(0xCCF0F7FF)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -47,7 +56,8 @@ class AppTheme {
       gradient: v22GlassGradient,
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(color: borderColor, width: 1.2),
-      boxShadow: extraShadows ??
+      boxShadow:
+          extraShadows ??
           [
             BoxShadow(
               color: v22GlowShadow.withValues(alpha: 0.08),
@@ -88,7 +98,10 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
@@ -108,12 +121,11 @@ class AppTheme {
           elevation: 0,
           backgroundColor: v22ElectricBlue,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          textStyle: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),
       ),
       cardTheme: CardThemeData(
