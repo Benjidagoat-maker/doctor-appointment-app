@@ -24,19 +24,9 @@ class _AuthGateState extends State<AuthGate> {
       final user = await FirebaseAuth.instance.authStateChanges().first;
       if (user == null) return const LoginScreen();
 
-      final isSuperAdmin = (user.email ?? '').trim().toLowerCase() ==
-          AuthService.superAdminEmail.toLowerCase();
-
-      if (!isSuperAdmin && !user.emailVerified) return const LoginScreen();
-
-      try {
-        final profile = await AuthService().loadOrCreateProfile(user);
-        return (profile.isAdmin || isSuperAdmin)
-            ? const AdminDashboard()
-            : const HomeScreen();
-      } catch (_) {
-        return isSuperAdmin ? const AdminDashboard() : const HomeScreen();
-      }
+      if (!user.emailVerified) return const LoginScreen();
+      final profile = await AuthService().loadOrCreateProfile(user);
+      return profile.isAdmin ? const AdminDashboard() : const HomeScreen();
     } catch (_) {
       // Can't load the profile (offline, rules...): fall back to a clean login.
       return const LoginScreen();

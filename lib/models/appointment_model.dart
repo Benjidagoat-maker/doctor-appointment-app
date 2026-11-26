@@ -16,6 +16,9 @@ class AppointmentModel {
   final DateTime createdAt;
   final DateTime? updatedAt;
   final String? cancelledBy;
+  final String lockId;
+  final int amountMinor;
+  final String currency;
 
   AppointmentModel({
     required this.id,
@@ -33,13 +36,19 @@ class AppointmentModel {
     required this.createdAt,
     this.updatedAt,
     this.cancelledBy,
+    this.lockId = '',
+    this.amountMinor = 0,
+    this.currency = 'TND',
   }) : endAt = endAt ?? date.add(Duration(minutes: durationMin));
 
-  bool get isCancelled => status.toLowerCase() == 'cancelled';
+  bool get isCancelled =>
+      status.toLowerCase().startsWith('cancelled') || status == 'expired';
   bool get isConfirmed => status.toLowerCase() == 'confirmed';
   bool get isCompleted => status.toLowerCase() == 'completed';
   bool get isNoShow => status.toLowerCase() == 'no_show';
-  bool get isPending => status.toLowerCase() == 'pending';
+  bool get isPending =>
+      status.toLowerCase() == 'pending' || status == 'pending_payment';
+  bool get hasValidDate => date.millisecondsSinceEpoch > 0;
 
   /// Deterministic slot key for the slot lock document: yyyyMMddHHmm in UTC
   static String formatSlotKey(DateTime dateTime) {
@@ -62,7 +71,7 @@ class AppointmentModel {
       final parsed = DateTime.tryParse(value);
       if (parsed != null) return parsed;
     }
-    return DateTime.now();
+    return DateTime.fromMillisecondsSinceEpoch(0);
   }
 
   /// Normalizes legacy statuses ('booked', 'pending', 'Cancelled') to v1 specification:
@@ -100,6 +109,9 @@ class AppointmentModel {
       createdAt: parseDate(map['createdAt'] ?? map['created_at']),
       updatedAt: map['updatedAt'] != null ? parseDate(map['updatedAt']) : null,
       cancelledBy: map['cancelledBy'] as String?,
+      lockId: map['lockId'] as String? ?? '',
+      amountMinor: (map['amountMinor'] as num?)?.toInt() ?? 0,
+      currency: map['currency'] as String? ?? 'TND',
     );
   }
 
@@ -118,5 +130,8 @@ class AppointmentModel {
         'createdAt': Timestamp.fromDate(createdAt.toUtc()),
         if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!.toUtc()),
         if (cancelledBy != null) 'cancelledBy': cancelledBy,
+        if (lockId.isNotEmpty) 'lockId': lockId,
+        'amountMinor': amountMinor,
+        'currency': currency,
       };
 }

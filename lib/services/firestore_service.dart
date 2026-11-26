@@ -1,14 +1,24 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/foundation.dart';
 import '../models/appointment_model.dart';
 import '../models/doctor_model.dart';
 import '../models/user_model.dart';
 import '../utils/app_utils.dart';
 
 class FirestoreService {
-  FirestoreService({FirebaseFirestore? firestore}) : _dbOverride = firestore;
+  FirestoreService({
+    FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
+  })  : _dbOverride = firestore,
+        _functionsOverride = functions;
 
   final FirebaseFirestore? _dbOverride;
+  final FirebaseFunctions? _functionsOverride;
   FirebaseFirestore get _db => _dbOverride ?? FirebaseFirestore.instance;
+  FirebaseFunctions get _functions =>
+      _functionsOverride ??
+      FirebaseFunctions.instanceFor(region: 'europe-west1');
 
   // ============================================================
   // USERS MANAGEMENT (Admin-Only Live Monitor & Role Toggling)
@@ -32,7 +42,14 @@ class FirestoreService {
   Future<void> toggleUserRole(String uid, String currentRole) async {
     final targetRole =
         UserModel.normalizeRole(currentRole) == 'admin' ? 'user' : 'admin';
-    await _db.collection('users').doc(uid).update({'role': targetRole});
+    try {
+      await _functions.httpsCallable('setUserRole').call({
+        'uid': uid,
+        'role': targetRole,
+      });
+    } on FirebaseFunctionsException catch (e) {
+      throw AppException(e.message ?? 'Unable to update user role.');
+    }
   }
 
   // ============================================================
@@ -74,159 +91,50 @@ class FirestoreService {
   // APPOINTMENTS MANAGEMENT
   // ============================================================
 
-  /// Atomic booking implementation per Section 6.3 of the Cahier des charges.
-  /// Uses a Firestore batch transaction locking doctors/{doctorId}/bookedSlots/{slotKey}
-  /// and creating appointments/{apptId}.
-  ///
-  /// Prevents double bookings atomically at database level.
+  /// Asks the trusted server to validate the slot and atomically reserve it.
   Future<String> bookAppointment({
-    required String userId,
-    String patientName = '',
-    String patientEmail = '',
     required String doctorId,
-    String doctorName = '',
-    String specialty = 'General',
     required DateTime date,
-    int durationMin = 30,
     String reason = '',
   }) async {
-    final now = DateTime.now();
-    if (!date.isAfter(now)) {
-      throw const AppException('Please choose a time in the future.');
-    }
-
-    // Check maximum 3 active upcoming appointments for patient (Exigence F-23)
-    final mine = await _db
-        .collection('appointments')
-        .where('userId', isEqualTo: userId)
-        .get();
-
-    final activeUpcoming = mine.docs.where((d) {
-      final data = d.data();
-      final status = AppointmentModel.normalizeStatus(data['status']);
-      if (status == 'cancelled' || status == 'completed') return false;
-      final apptDate = AppointmentModel.parseDate(data['date']);
-      return apptDate.isAfter(now);
-    }).toList();
-
-    if (activeUpcoming.length >= 3) {
-      throw const AppException(
-          'Maximum of 3 upcoming active appointments reached.');
-    }
-
-    // Check overlap for the same patient (Exigence F-23)
-    final apptEnd = date.add(Duration(minutes: durationMin));
-    final hasOverlap = activeUpcoming.any((d) {
-      final data = d.data();
-      final existingStart = AppointmentModel.parseDate(data['date']);
-      final existingDur = (data['durationMin'] as num?)?.toInt() ?? 30;
-      final existingEnd = existingStart.add(Duration(minutes: existingDur));
-      return (date.isBefore(existingEnd) && apptEnd.isAfter(existingStart));
-    });
-
-    if (hasOverlap) {
-      throw const AppException(
-          'You already have an appointment during this time window.');
-    }
-
-    final slotKey = AppointmentModel.formatSlotKey(date);
-    final apptRef = _db.collection('appointments').doc();
-    final lockRef = _db
-        .collection('doctors')
-        .doc(doctorId)
-        .collection('bookedSlots')
-        .doc(slotKey);
-
-    // Check if slot lock already exists before committing
-    final existingLock = await lockRef.get();
-    if (existingLock.exists) {
-      throw const AppException('Ce créneau vient d\'être pris');
-    }
-
-    final batch = _db.batch();
-
-    final appointment = AppointmentModel(
-      id: apptRef.id,
-      userId: userId,
-      patientName: patientName,
-      patientEmail: patientEmail,
-      doctorId: doctorId,
-      doctorName: doctorName,
-      specialty: specialty,
-      date: date,
-      durationMin: durationMin,
-      endAt: apptEnd,
-      status: 'confirmed',
-      reason: reason,
-      createdAt: now,
-    );
-
-    batch.set(apptRef, appointment.toMap());
-    batch.set(lockRef, {
-      'appointmentId': apptRef.id,
-      'userId': userId,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
     try {
-      await batch.commit();
-      return apptRef.id;
-    } catch (e) {
-      throw const AppException('Ce créneau vient d\'être pris');
+      final result = await _functions.httpsCallable('bookAppointment').call({
+        'doctorId': doctorId,
+        'date': date.toUtc().toIso8601String(),
+        'reason': reason,
+      });
+      final data = Map<String, dynamic>.from(result.data as Map);
+      return data['appointmentId'] as String;
+    } on FirebaseFunctionsException catch (e) {
+      throw AppException(e.message ?? 'Unable to book this appointment.');
     }
   }
 
-  /// Admin manual appointment creation
-  Future<void> addAppointment(AppointmentModel appt) =>
-      _db.collection('appointments').add(appt.toMap());
+  /// Admin appointment creation is performed by a trusted server transaction.
+  Future<void> addAppointment(AppointmentModel appt) async {
+    try {
+      await _functions.httpsCallable('createAdminAppointment').call({
+        'doctorId': appt.doctorId,
+        'patientEmail': appt.patientEmail,
+        'date': appt.date.toUtc().toIso8601String(),
+        'reason': appt.reason,
+      });
+    } on FirebaseFunctionsException catch (e) {
+      throw AppException(e.message ?? 'Unable to create this appointment.');
+    }
+  }
 
-  /// Cancels an appointment.
-  /// If patient is cancelling, enforces the 48-hour cancellation rule (Section 6.7 / F-24).
-  /// Releases doctors/{doctorId}/bookedSlots/{slotKey} atomically.
+  /// Cancels an appointment through the server-authorized booking workflow.
   Future<void> cancelAppointment({
     required String appointmentId,
-    required String cancelledByUid,
-    bool isAdminOrDoctor = false,
   }) async {
-    final apptDoc =
-        await _db.collection('appointments').doc(appointmentId).get();
-    if (!apptDoc.exists) {
-      throw const AppException('Appointment not found.');
+    try {
+      await _functions
+          .httpsCallable('cancelAppointment')
+          .call({'appointmentId': appointmentId});
+    } on FirebaseFunctionsException catch (e) {
+      throw AppException(e.message ?? 'Unable to cancel this appointment.');
     }
-
-    final data = apptDoc.data()!;
-    final appt = AppointmentModel.fromMap(data, apptDoc.id);
-
-    if (appt.isCancelled) {
-      return; // Already cancelled
-    }
-
-    final now = DateTime.now();
-
-    // Patients can only cancel at least 48h before the appointment
-    if (!isAdminOrDoctor) {
-      if (appt.date.difference(now).inHours < 48) {
-        throw const AppException(
-            'Les rendez-vous ne peuvent être annulés que plus de 48 h à l\'avance.');
-      }
-    }
-
-    final slotKey = AppointmentModel.formatSlotKey(appt.date);
-    final lockRef = _db
-        .collection('doctors')
-        .doc(appt.doctorId)
-        .collection('bookedSlots')
-        .doc(slotKey);
-
-    final batch = _db.batch();
-    batch.update(_db.collection('appointments').doc(appointmentId), {
-      'status': 'cancelled',
-      'cancelledBy': cancelledByUid,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    batch.delete(lockRef);
-
-    await batch.commit();
   }
 
   /// Admin / Doctor update appointment status (Confirm/Cancel/Completed/Pending/no_show)
@@ -235,23 +143,38 @@ class FirestoreService {
     required String newStatus,
   }) async {
     final normalized = AppointmentModel.normalizeStatus(newStatus);
-    await _db.collection('appointments').doc(appointmentId).update({
-      'status': normalized,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    try {
+      await _functions.httpsCallable('setAppointmentStatus').call({
+        'appointmentId': appointmentId,
+        'status': normalized,
+      });
+    } on FirebaseFunctionsException catch (e) {
+      throw AppException(e.message ?? 'Unable to update appointment status.');
+    }
   }
 
   /// Admin reschedule appointment date
-  Future<void> rescheduleAppointment(
-          String appointmentId, DateTime newDate) =>
-      _db
-          .collection('appointments')
-          .doc(appointmentId)
-          .update({'date': Timestamp.fromDate(newDate.toUtc())});
+  Future<void> rescheduleAppointment(String appointmentId, DateTime newDate) async {
+    try {
+      await _functions.httpsCallable('rescheduleAppointment').call({
+        'appointmentId': appointmentId,
+        'date': newDate.toUtc().toIso8601String(),
+      });
+    } on FirebaseFunctionsException catch (e) {
+      throw AppException(e.message ?? 'Unable to reschedule this appointment.');
+    }
+  }
 
   /// Admin delete appointment record
-  Future<void> deleteAppointment(String appointmentId) =>
-      _db.collection('appointments').doc(appointmentId).delete();
+  Future<void> deleteAppointment(String appointmentId) async {
+    try {
+      await _functions
+          .httpsCallable('deleteAppointment')
+          .call({'appointmentId': appointmentId});
+    } on FirebaseFunctionsException catch (e) {
+      throw AppException(e.message ?? 'Unable to delete this appointment.');
+    }
+  }
 
   /// Newest first. Sorted on client side.
   Stream<List<AppointmentModel>> getUserAppointments(String userId) => _db
@@ -272,8 +195,14 @@ class FirestoreService {
 
   List<AppointmentModel> _toSortedAppointments(
       QuerySnapshot<Map<String, dynamic>> s) {
-    final list =
-        s.docs.map((d) => AppointmentModel.fromMap(d.data(), d.id)).toList();
+    final list = s.docs
+        .map((d) => AppointmentModel.fromMap(d.data(), d.id))
+        .where((appointment) {
+          if (appointment.hasValidDate) return true;
+          debugPrint('Ignoring appointment ${appointment.id} with an invalid date.');
+          return false;
+        })
+        .toList();
     list.sort((a, b) => b.date.compareTo(a.date));
     return list;
   }

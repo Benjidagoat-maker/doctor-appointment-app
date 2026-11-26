@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' show User;
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
-import 'auth_service.dart';
 
 /// Firebase-backed 2-Step OTP Verification Service
 class OtpService {
@@ -109,8 +108,8 @@ class OtpService {
   /// - `lastLogin`: serverTimestamp()
   Future<UserModel> finalizeOtpAuthentication(User user) async {
     final email = user.email ?? '';
-    final isSuperAdmin = email.trim().toLowerCase() == AuthService.superAdminEmail.toLowerCase();
-    final role = isSuperAdmin ? 'admin' : 'user';
+    final tokenResult = await user.getIdTokenResult(true);
+    final role = UserModel.normalizeRole(tokenResult.claims?['role']);
 
     final userProfile = UserModel(
       uid: user.uid,
@@ -122,30 +121,24 @@ class OtpService {
       createdAt: DateTime.now(),
     );
 
-    // Write to Firestore users collection
-    try {
-      await _db.collection('users').doc(user.uid).set({
-        'uid': user.uid,
+    await _db.collection('users').doc(user.uid).set({
         'name': userProfile.name,
         'email': userProfile.email,
-        'role': role,
         'isOnline': true,
         'is_online': true,
         'lastLogin': FieldValue.serverTimestamp(),
         'last_login': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-    } catch (_) {
-      // Fallback for minimal legacy rules
-      try {
-        await _db.collection('users').doc(user.uid).set({
-          'name': userProfile.name,
-          'email': userProfile.email,
-          'role': role,
-        }, SetOptions(merge: true));
-      } catch (_) {}
-    }
 
-    return userProfile;
+    return UserModel(
+      uid: userProfile.uid,
+      name: userProfile.name,
+      email: userProfile.email,
+      role: role,
+      isOnline: userProfile.isOnline,
+      lastLogin: userProfile.lastLogin,
+      createdAt: userProfile.createdAt,
+    );
   }
 }
 

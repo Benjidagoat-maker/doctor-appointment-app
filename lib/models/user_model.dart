@@ -55,7 +55,6 @@ class UserModel {
   Map<String, dynamic> toMap() => {
         'name': name,
         'email': email,
-        'role': normalizeRole(role),
         'is_online': isOnline,
         if (lastLogin != null) 'last_login': Timestamp.fromDate(lastLogin!),
         if (createdAt != null) 'created_at': Timestamp.fromDate(createdAt!),

@@ -76,8 +76,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// Strict Guard for route `/admin`:
-/// Checks if current logged-in Firebase user has role === 'admin'
+/// Strict guard for `/admin`; authorization comes from the signed token claim.
 class _AdminRouteGuard extends StatelessWidget {
   const _AdminRouteGuard();
 
@@ -88,27 +87,20 @@ class _AdminRouteGuard extends StatelessWidget {
       return const LoginScreen();
     }
 
-    final isSuperAdmin = (user.email ?? '').trim().toLowerCase() ==
-        AuthService.superAdminEmail.toLowerCase();
-
-    if (!isSuperAdmin && !user.emailVerified) {
+    if (!user.emailVerified) {
       return const LoginScreen();
     }
 
-    if (isSuperAdmin) {
-      return const AdminDashboard();
-    }
-
     return FutureBuilder(
-      future: AuthService().getUserData(user.uid),
+      future: user.getIdTokenResult(true),
       builder: (context, snapshot) {
+        if (snapshot.hasError) return const LoginScreen();
         if (!snapshot.hasData) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        final profile = snapshot.data;
-        if (profile != null && profile.isAdmin) {
+        if (snapshot.data!.claims?['role'] == 'admin') {
           return const AdminDashboard();
         }
         return const LoginScreen();

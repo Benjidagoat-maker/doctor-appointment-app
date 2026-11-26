@@ -30,6 +30,8 @@ class DoctorModel {
   final List<String> daysOff;
   final String timezone;
   final String? ownerUid;
+  final int consultationFeeMinor;
+  final String currency;
 
   DoctorModel({
     required this.id,
@@ -47,6 +49,8 @@ class DoctorModel {
     List<String>? daysOff,
     this.timezone = 'Africa/Tunis',
     this.ownerUid,
+    this.consultationFeeMinor = 0,
+    this.currency = 'TND',
   })  : active = available ?? active,
         schedule = schedule ?? _defaultSchedule(),
         daysOff = daysOff ?? const [];
@@ -133,6 +137,9 @@ class DoctorModel {
       daysOff: parsedDaysOff,
       timezone: map['timezone'] ?? 'Africa/Tunis',
       ownerUid: map['ownerUid'] as String?,
+      consultationFeeMinor:
+          (map['consultationFeeMinor'] as num?)?.toInt() ?? 0,
+      currency: map['currency'] as String? ?? 'TND',
     );
   }
 
@@ -156,6 +163,8 @@ class DoctorModel {
       'schedule': schedMap,
       'daysOff': daysOff,
       'timezone': timezone,
+      'consultationFeeMinor': consultationFeeMinor,
+      'currency': currency,
       if (ownerUid != null) 'ownerUid': ownerUid,
     };
   }
