@@ -51,36 +51,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final isSuperAdmin =
-          email.trim().toLowerCase() == AuthService.superAdminEmail.toLowerCase();
-
-      UserCredential creds;
-      try {
-        creds = await _auth.login(email, password);
-      } on FirebaseAuthException catch (e) {
-        // If super admin account does not exist in Firebase Auth yet, auto-create it!
-        if (isSuperAdmin &&
-            (e.code == 'user-not-found' ||
-                e.code == 'invalid-credential' ||
-                e.code == 'wrong-password')) {
-          try {
-            await _auth.signUp(
-              name: 'Super Admin Kenji',
-              email: email,
-              password: password,
-            );
-            creds = await _auth.login(email, password);
-          } catch (_) {
-            rethrow;
-          }
-        } else {
-          rethrow;
-        }
-      }
+      final creds = await _auth.login(email, password);
 
       final profile = await _auth.loadOrCreateProfile(creds.user!);
       if (!mounted) return;
-      final next = (profile.role.toLowerCase() == 'admin' || isSuperAdmin)
+      final next = profile.isAdmin
           ? const AdminDashboard()
           : const HomeScreen();
       Navigator.pushReplacement(

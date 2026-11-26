@@ -1,49 +1,50 @@
 rules_version = '2';
 service cloud.firestore {
-  match /databases/{db}/documents {
+  match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function isAdmin() { return signedIn() && request.auth.token.admin == true; }
-    function verified() { return signedIn() && request.auth.token.email_verified == true; }
-    function isDoctorOf(docId) { return signedIn() && request.auth.token.doctorId == docId; }
+    function role() { return request.auth.token.role; }
+    function isAdmin() { return signedIn() && role() == 'admin'; }
+    function isDoctorOf(doctorId) {
+      return signedIn() && role() == 'doctor' &&
+        request.auth.token.doctorId == doctorId;
+    }
 
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow create: if signedIn() && request.auth.uid == uid
-                    && request.resource.data.role == 'user';
-      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid
-                    && request.resource.data.role == resource.data.role);
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if signedIn() && request.auth.uid == uid &&
+        !('role' in request.resource.data);
+      allow update: if signedIn() &&
+        (request.auth.uid == uid || isAdmin()) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['role', 'email', 'uid']);
       allow delete: if isAdmin();
     }
 
-    match /doctors/{id} {
+    match /doctors/{doctorId} {
       allow read: if signedIn();
       allow write: if isAdmin();
 
-      match /bookedSlots/{slot} {
+      match /bookedSlots/{slotId} {
         allow read: if signedIn();
-        allow create: if verified() &&
-          getAfter(/databases/$(db)/documents/appointments/$(request.resource.data.appointmentId)).data.userId == request.auth.uid;
-        allow update: if false;
-        allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid &&
-          getAfter(/databases/$(db)/documents/appointments/$(resource.data.appointmentId)).data.status == 'cancelled');
+        allow write: if false;
       }
     }
 
-    match /appointments/{id} {
-      allow read: if signedIn() && (resource.data.userId == request.auth.uid
-                    || isAdmin() || isDoctorOf(resource.data.doctorId));
-      allow create: if verified() && request.resource.data.userId == request.auth.uid
-                    && request.resource.data.status == 'confirmed'
-                    && request.resource.data.date > request.time;
-      allow update: if isAdmin()
-                    || (signedIn() && resource.data.userId == request.auth.uid
-                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt','cancelledBy'])
-                        && request.resource.data.status == 'cancelled'
-                        && resource.data.date > request.time + duration.value(48, 'h'))
-                    || (isDoctorOf(resource.data.doctorId)
-                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
-                        && request.resource.data.status in ['completed','no_show','cancelled']);
-      allow delete: if isAdmin();
+    match /bookedSlots/{slotId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /appointments/{appointmentId} {
+      allow read: if signedIn() &&
+        (resource.data.userId == request.auth.uid || isAdmin() ||
+         isDoctorOf(resource.data.doctorId));
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

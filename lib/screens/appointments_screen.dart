@@ -69,10 +69,8 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
     if (confirm != true) return;
 
     try {
-      final user = _authService.currentUser;
       await _firestoreService.cancelAppointment(
         appointmentId: appt.id,
-        cancelledByUid: user?.uid ?? appt.userId,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

@@ -201,9 +201,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       final profile = await _otpService.finalizeOtpAuthentication(widget.user);
       if (!mounted) return;
 
-      final isSuperAdmin = email.trim().toLowerCase() ==
-          AuthService.superAdminEmail.toLowerCase();
-      final destination = (profile.isAdmin || isSuperAdmin)
+      final destination = profile.isAdmin
           ? const AdminDashboard()
           : const HomeScreen();
 

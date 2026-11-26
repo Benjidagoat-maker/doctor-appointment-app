@@ -25,6 +25,8 @@ void main() {
         bio: 'Senior Cardiologist',
         experienceYears: 10,
         avatarUrl: 'https://img.example/avatar.png',
+        consultationFeeMinor: 12500,
+        currency: 'EUR',
       );
       final back = DoctorModel.fromMap(d.toMap(), 'x');
       expect(back.name, 'Dr A');
@@ -33,6 +35,8 @@ void main() {
       expect(back.bio, 'Senior Cardiologist');
       expect(back.experienceYears, 10);
       expect(back.avatarUrl, 'https://img.example/avatar.png');
+      expect(back.consultationFeeMinor, 12500);
+      expect(back.currency, 'EUR');
     });
   });
 
@@ -49,6 +53,16 @@ void main() {
 
       final upperAdmin = UserModel.fromMap({'name': 'Admin', 'email': 'a@b.com', 'role': 'ADMIN'}, 'u2');
       expect(upperAdmin.isAdmin, isTrue);
+    });
+
+    test('client profile serialization never writes a role', () {
+      final user = UserModel(
+        uid: 'u1',
+        name: 'Admin',
+        email: 'admin@example.com',
+        role: 'admin',
+      );
+      expect(user.toMap().containsKey('role'), isFalse);
     });
 
     test('parses isOnline and timestamps', () {
@@ -78,6 +92,9 @@ void main() {
         date: date,
         status: 'booked',
         createdAt: DateTime(2029, 12, 1),
+        lockId: 'doctor_123',
+        amountMinor: 30000,
+        currency: 'TND',
       );
       final back = AppointmentModel.fromMap(a.toMap(), 'a1');
       expect(back.id, 'a1');
@@ -87,6 +104,9 @@ void main() {
       expect(back.date.isAtSameMomentAs(date), isTrue);
       expect(back.isCancelled, isFalse);
       expect(back.isConfirmed, isTrue);
+      expect(back.lockId, 'doctor_123');
+      expect(back.amountMinor, 30000);
+      expect(back.currency, 'TND');
     });
 
     test('does not crash on legacy docs without createdAt / doctorName', () {
@@ -98,6 +118,15 @@ void main() {
       }, 'a');
       expect(a.doctorName, '');
       expect(a.isCancelled, isTrue); // case-insensitive
+    });
+
+    test('invalid dates are marked invalid instead of becoming the current time', () {
+      final appointment = AppointmentModel.fromMap({
+        'date': 'not-a-date',
+        'status': 'confirmed',
+      }, 'a');
+      expect(appointment.hasValidDate, isFalse);
+      expect(appointment.date, DateTime.fromMillisecondsSinceEpoch(0));
     });
   });
 }

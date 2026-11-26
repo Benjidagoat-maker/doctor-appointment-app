@@ -134,14 +134,8 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
 
     try {
       final apptId = await _firestoreService.bookAppointment(
-        userId: user.uid,
-        patientName: user.displayName ?? '',
-        patientEmail: user.email ?? '',
         doctorId: widget.doctor.id,
-        doctorName: widget.doctor.name,
-        specialty: widget.doctor.specialty,
         date: bookingDateTime,
-        durationMin: widget.doctor.slotDurationMin,
         reason: _reasonController.text.trim(),
       );
 

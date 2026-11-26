@@ -1,0 +1,19 @@
+{
+  "name": "doctor-care-functions",
+  "private": true,
+  "main": "lib/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "set-role": "node scripts/set-role.cjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.5.1",
+    "firebase-functions": "^7.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

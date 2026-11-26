@@ -34,18 +34,20 @@ The app uses Firebase Authentication for sign-in, Cloud Firestore for doctors an
 ### Administrators
 - Add and remove doctors and update their availability.
 - Review appointments across the app.
-- Admin access is controlled by the `role` field in the Firestore `users` collection; users cannot grant themselves admin access.
+- Admin access is controlled by Firebase Authentication custom claims. The Firestore role field is a display mirror and is never used for authorization.
 
 ### Security and backend
-- Firestore security rules restrict user data and appointment access.
-- Firebase App Check is initialized by the app. Production enforcement must also be configured in the Firebase Console.
-- Appointment booking prevents past appointments and duplicate bookings by the same patient in the client. Preventing different patients from booking the same slot requires an additional trusted server-side check.
+- Firestore rules deny all client writes to appointment records and slot locks. Callable Cloud Functions validate patient bookings and handle admin appointment management transactionally.
+- Booking validates the doctor's active state, configured timezone and schedule, patient limits, and overlapping visits on the server.
+- Callable functions enforce Firebase App Check. Register the app providers and debug tokens in Firebase Console before enabling production traffic.
+- Existing accounts need custom claims assigned before the stricter rules are deployed; see the migration steps below.
 
 ## Technology
 
 - **App:** Flutter, Dart, Material Design
 - **Authentication:** Firebase Authentication
 - **Data:** Cloud Firestore and Firebase Realtime Database
+- **Trusted backend:** Firebase Cloud Functions (TypeScript)
 - **Optional integration:** SQL-backed REST API
 - **Hosting:** Firebase Hosting
 - **Automation:** GitHub Actions for analysis, tests, and hosting deployment
@@ -76,6 +78,31 @@ flutterfire configure
 ```
 
 In the Firebase Console, enable Email/Password sign-in and create a Cloud Firestore database. Add the domains you use (for example, `localhost` and your hosting domain) to Authentication's authorized domains. Review `firestore.rules` and `database.rules.json` before deploying rules to your project.
+
+Install the Functions dependencies with Node.js 22:
+
+```bash
+npm --prefix functions ci
+npm --prefix functions run build
+```
+
+### Deploying the secure booking backend
+
+Deploy the callable functions before changing the rules:
+
+```bash
+firebase deploy --only functions
+```
+
+Existing accounts do not receive custom claims automatically. Use the Firebase Auth UID (not an email address) and an Admin SDK credential to assign roles before deploying the new rules. The script uses Application Default Credentials; run `gcloud auth application-default login` or set `GOOGLE_APPLICATION_CREDENTIALS` to a protected service-account file:
+
+```bash
+npm --prefix functions run set-role -- YOUR_PATIENT_UID user
+npm --prefix functions run set-role -- YOUR_ADMIN_UID admin
+firebase deploy --only firestore:rules,firestore:indexes
+```
+
+Assign `user` to every existing patient and `admin` only to explicitly approved administrator accounts. Do not derive admin access from an email address. New accounts receive the `user` claim through the `initializeNewUser` Auth trigger. Users whose roles change must sign in again to refresh their token.
 
 For local App Check development, debug providers are used by debug builds. Register the debug token shown by the app in Firebase Console → App Check. For production, configure the appropriate App Check provider and enforcement settings in the console.
 
@@ -120,7 +147,7 @@ The Firebase Hosting configuration serves `build/web`. To deploy, authenticate w
 firebase deploy --only hosting
 ```
 
-Firebase resources and rules can be deployed separately after reviewing the project configuration:
+Other Firebase resources can be deployed after reviewing the project configuration:
 
 ```bash
 firebase deploy --only firestore:rules,database
@@ -150,11 +177,12 @@ lib/
 firestore.rules               # Cloud Firestore security rules
  database.rules.json           # Realtime Database security rules
 firebase.json                 # Firebase Hosting and service configuration
+functions/                     # Trusted booking and role-management callables
 ```
 
 ## Known limitations
 
-- The client cannot guarantee that two different patients will not book the same doctor and time. Add a server-side transaction or trusted booking function before using this for real scheduling.
+- Stripe, video visits, and the authenticated SQL records API are not implemented yet; do not treat the current app as production-ready for real payments, telehealth, or protected health information.
 - The optional SQL API integration is a client-side example and does not authenticate requests. Do not connect it to sensitive data without adding server-side identity checks and access controls.
 - Configure Firebase services, authorized domains, App Check, and security rules for your own environment before deployment.
 
