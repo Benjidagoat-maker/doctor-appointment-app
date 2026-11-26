@@ -51,10 +51,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showSqlRecordsSheet(BuildContext context) {
-    // One fetch per opening - not one per rebuild while the sheet is dragged.
-    final recordsFuture = _sqlService.fetchSqlMedicalRecords(
-      _authService.currentUser?.uid ?? 'guest',
-    );
+    final recordsFuture = _sqlService.isConfigured
+        ? _sqlService.fetchSqlMedicalRecords()
+        : null;
 
     showModalBottomSheet(
       context: context,
@@ -103,14 +102,33 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       Text(
                         _sqlService.isConfigured
-                            ? 'Synchronized via REST API (PostgreSQL / MySQL / Cloud SQL)'
-                            : 'Demo data - no SQL backend is configured yet.',
+                            ? 'Connected to your secure medical records service.'
+                            : 'Medical records service is not configured.',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 16),
-                      if (snapshot.connectionState == ConnectionState.waiting)
+                      if (!_sqlService.isConfigured)
+                        const Expanded(
+                          child: Center(
+                            child: Text(
+                              'No medical records are available because no SQL service is connected.',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        )
+                      else if (snapshot.connectionState ==
+                          ConnectionState.waiting)
                         const Expanded(
                           child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (snapshot.hasError)
+                        const Expanded(
+                          child: Center(
+                            child: Text(
+                              'Medical records could not be loaded. Please try again later.',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
                         )
                       else if (!snapshot.hasData || snapshot.data!.isEmpty)
                         const Expanded(
@@ -137,18 +155,19 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                   title: Text(
-                                    item['diagnosis'] ?? 'Medical Checkup',
+                                    item['diagnosis']?.toString() ??
+                                        'Medical Checkup',
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   subtitle: Text(
-                                    '${item['doctor']} • ${item['date']}\n${item['source']}',
+                                    '${item['doctor_name'] ?? 'Doctor'} • ${item['record_date'] ?? ''}',
                                     style: const TextStyle(fontSize: 12),
                                   ),
                                   trailing: Chip(
                                     label: Text(
-                                      item['status'] ?? 'Active',
+                                      item['status']?.toString() ?? 'Active',
                                       style: const TextStyle(
                                         fontSize: 11,
                                         color: AppTheme.successGreen,

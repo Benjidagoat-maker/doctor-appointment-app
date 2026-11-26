@@ -18,7 +18,7 @@ A Flutter application for discovering doctors, booking appointments, and managin
 
 Doctor Care is a cross-platform appointment-booking app built with Flutter and Dart. Patients can find doctors, view availability, book and cancel appointments, and see their appointment history. Administrators can manage the doctor directory and oversee bookings.
 
-The app uses Firebase Authentication for sign-in, Cloud Firestore for doctors and appointments, and Firebase Realtime Database for live doctor presence. An optional REST API integration can retrieve medical-record data from a SQL-backed service. Without that API configured, the app displays clearly labeled demo records instead.
+The app uses Firebase Authentication for sign-in, Cloud Firestore for doctors and appointments, and Firebase Realtime Database for live doctor presence. Medical records require a separately configured, authenticated SQL-backed API; when it is unavailable, the app does not display fabricated records.
 
 > **Important:** This project is a software demo, not a medical service. Do not use it to store or process real patient information without appropriate security, privacy, and regulatory review.
 
@@ -29,7 +29,7 @@ The app uses Firebase Authentication for sign-in, Cloud Firestore for doctors an
 - Search the doctor directory by name, specialty, or phone number.
 - View doctor availability and live presence when Realtime Database is configured.
 - Choose a date and time to book an appointment, then view or cancel bookings.
-- View SQL-backed medical records when an API is configured; otherwise, see sample demo data.
+- View SQL-backed medical records only when an authenticated API is configured.
 
 ### Administrators
 - Add and remove doctors and update their availability.
@@ -40,7 +40,7 @@ The app uses Firebase Authentication for sign-in, Cloud Firestore for doctors an
 - Firestore rules deny all client writes to appointment records and slot locks. Callable Cloud Functions validate patient bookings and handle admin appointment management transactionally.
 - Booking validates the doctor's active state, configured timezone and schedule, patient limits, and overlapping visits on the server.
 - Callable functions enforce Firebase App Check. Register the app providers and debug tokens in Firebase Console before enabling production traffic.
-- Existing accounts need custom claims assigned before the stricter rules are deployed; see the migration steps below.
+- Existing accounts need an explicit admin claim before admin features are available; legacy accounts can still book as patients.
 
 ## Technology
 
@@ -50,7 +50,7 @@ The app uses Firebase Authentication for sign-in, Cloud Firestore for doctors an
 - **Trusted backend:** Firebase Cloud Functions (TypeScript)
 - **Optional integration:** SQL-backed REST API
 - **Hosting:** Firebase Hosting
-- **Automation:** GitHub Actions for analysis, tests, and hosting deployment
+- **Automation:** GitHub Actions for analysis, tests, and Firebase deployment
 
 ## Run locally
 
@@ -94,15 +94,20 @@ Deploy the callable functions before changing the rules:
 firebase deploy --only functions
 ```
 
-Existing accounts do not receive custom claims automatically. Use the Firebase Auth UID (not an email address) and an Admin SDK credential to assign roles before deploying the new rules. The script uses Application Default Credentials; run `gcloud auth application-default login` or set `GOOGLE_APPLICATION_CREDENTIALS` to a protected service-account file:
+Existing accounts do not receive custom claims automatically. Use an Admin SDK credential to assign roles. The script uses Application Default Credentials; run `gcloud auth application-default login` or set `GOOGLE_APPLICATION_CREDENTIALS` to a protected service-account file:
 
 ```bash
 npm --prefix functions run set-role -- YOUR_PATIENT_UID user
 npm --prefix functions run set-role -- YOUR_ADMIN_UID admin
-firebase deploy --only firestore:rules,firestore:indexes
+# Or identify an existing account by email:
+npm --prefix functions run set-role -- --email admin@example.com admin
 ```
 
-Assign `user` to every existing patient and `admin` only to explicitly approved administrator accounts. Do not derive admin access from an email address. New accounts receive the `user` claim through the `initializeNewUser` Auth trigger. Users whose roles change must sign in again to refresh their token.
+Assign `admin` only to explicitly approved administrator accounts. A missing role claim is treated as a patient role for booking only; it never grants admin access. New accounts receive the `user` claim through the `initializeNewUser` Auth trigger. Users whose roles change must sign in again to refresh their token.
+
+On pushes to `main` or `master`, GitHub Actions now deploys Functions, Firestore rules/indexes, and Hosting in that order. The `FIREBASE_SERVICE_ACCOUNT` repository secret must have permission to deploy each resource. Pull-request runs deploy only a Hosting preview.
+
+For a manual backend deployment, run `firebase deploy --only functions` first, assign roles to existing accounts, then run `firebase deploy --only firestore:rules,firestore:indexes`.
 
 For local App Check development, debug providers are used by debug builds. Register the debug token shown by the app in Firebase Console → App Check. For production, configure the appropriate App Check provider and enforcement settings in the console.
 
@@ -120,18 +125,24 @@ Other supported targets depend on the Flutter SDK and platform toolchains instal
 
 ### Optional SQL API
 
-Set `SQL_API_URL` to the base URL of a compatible REST API. The app expects the following endpoints:
-
-- `GET <SQL_API_URL>/patients/<patientId>/records` — returns a JSON array of records.
-- `POST <SQL_API_URL>/appointments/sync` — accepts appointment JSON.
-
-For example:
+The app's records API is a Supabase Edge Function at the configured `SQL_API_URL` (default: `https://yuddnebxjvulyvrjhugf.supabase.co/functions/v1/api`). The migration in `supabase/migrations/` creates the PostgreSQL tables. Deploy the schema and Edge Function with the Supabase CLI:
 
 ```bash
-flutter run -d chrome --dart-define=SQL_API_URL=https://your-api.example.com/api
+supabase link --project-ref yuddnebxjvulyvrjhugf
+supabase db push
+supabase secrets set FIREBASE_PROJECT_ID=doctor-appointment-2026
+supabase functions deploy api --no-verify-jwt
 ```
 
-When `SQL_API_URL` is unset, the service uses its placeholder URL and returns demo records without making a network request. The sample client does not add authentication to these API requests; configure a trusted backend and appropriate authentication/authorization before connecting real data.
+The function verifies Firebase ID tokens itself, derives patient identity from the verified UID, and logs record access. The Supabase `service_role` key is used only inside the Edge Function; never add it to Flutter or GitHub variables. Direct `anon`/`authenticated` database access remains revoked by the migration. The app sends its Firebase ID token as `Authorization: Bearer <token>` and the public Supabase anon key as `apikey`.
+
+Set the Supabase anon/publishable key as the GitHub Actions variable `SUPABASE_ANON_KEY` so production web builds can call the function. This key is intentionally public; it does not grant database access. For local builds:
+
+```bash
+flutter run -d chrome --dart-define=SQL_API_URL=https://yuddnebxjvulyvrjhugf.supabase.co/functions/v1/api --dart-define=SUPABASE_ANON_KEY=YOUR_PUBLIC_SUPABASE_ANON_KEY
+```
+
+The records endpoint is read-only for patients and returns only finalized/amended records for the signed-in user. An empty table produces an empty list; no sample medical data is generated. Appointment booking remains server-authoritative in Firebase and is not copied to SQL by the client.
 
 ## Build and deploy
 
