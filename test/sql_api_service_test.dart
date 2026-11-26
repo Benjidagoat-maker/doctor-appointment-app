@@ -1,62 +1,103 @@
 import 'dart:convert';
+
 import 'package:doctor_appointment_app/services/sql_api_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
-  const realUrl = 'https://api.example.test/api';
+  group('SqlApiService configuration', () {
+    test('does not fabricate records when no backend is configured', () async {
+      final service = SqlApiService(baseUrl: '');
 
-  test('placeholder URL: labelled demo data and NO network traffic', () async {
-    var calls = 0;
-    final svc = SqlApiService(
-      client: MockClient((_) async {
-        calls++;
-        return http.Response('[]', 200);
-      }),
+      expect(service.isConfigured, isFalse);
+      expect(await service.fetchSqlMedicalRecords(), isEmpty);
+    });
+
+    test('requires a public Supabase key before making requests', () {
+      expect(
+        SqlApiService(baseUrl: 'https://records.example.com/api').isConfigured,
+        isFalse,
+      );
+    });
+
+    test('requires HTTPS except for local development hosts', () {
+      expect(
+        SqlApiService(
+          baseUrl: 'https://records.example.com/api',
+          anonKey: 'public-key',
+        ).isConfigured,
+        isTrue,
+      );
+      expect(
+        SqlApiService(
+          baseUrl: 'http://records.example.com/api',
+          anonKey: 'public-key',
+        ).isConfigured,
+        isFalse,
+      );
+      expect(
+        SqlApiService(
+          baseUrl: 'http://localhost:8080/api',
+          anonKey: 'public-key',
+        ).isConfigured,
+        isTrue,
+      );
+      expect(
+        SqlApiService(baseUrl: 'https://', anonKey: 'public-key').isConfigured,
+        isFalse,
+      );
+      expect(
+        SqlApiService(
+          baseUrl: 'https://user@records.example.com/api',
+          anonKey: 'public-key',
+        ).isConfigured,
+        isFalse,
+      );
+    });
+
+    test(
+      'sends Firebase identity and Supabase project key to records API',
+      () async {
+        final service = SqlApiService(
+          baseUrl: 'https://records.example.com/functions/v1/api/',
+          anonKey: 'public-anon-key',
+          idTokenProvider: () async => 'firebase-id-token',
+          client: MockClient((request) async {
+            expect(request.url.path, '/functions/v1/api/records');
+            expect(request.headers['apikey'], 'public-anon-key');
+            expect(
+              request.headers['authorization'],
+              'Bearer firebase-id-token',
+            );
+            return http.Response(
+              jsonEncode([
+                {
+                  'id': 'record-1',
+                  'diagnosis': 'Annual checkup',
+                  'record_date': '2026-11-26',
+                },
+              ]),
+              200,
+            );
+          }),
+        );
+
+        final records = await service.fetchSqlMedicalRecords();
+
+        expect(records.single['diagnosis'], 'Annual checkup');
+      },
     );
-    expect(svc.isConfigured, isFalse);
 
-    final records = await svc.fetchSqlMedicalRecords('u1');
-    expect(records, isNotEmpty);
-    expect(records.every((r) => '${r['source']}'.contains('DEMO')), isTrue);
-    expect(await svc.syncAppointmentToSql({'a': 1}), isFalse);
-    expect(calls, 0);
-  });
+    test('surfaces API failures instead of silently returning no records', () {
+      final service = SqlApiService(
+        baseUrl: 'https://records.example.com/api',
+        anonKey: 'public-anon-key',
+        idTokenProvider: () async => 'firebase-id-token',
+        client: MockClient((_) async => http.Response('', 401)),
+      );
 
-  test('configured: parses a 200 response', () async {
-    final svc = SqlApiService(
-      baseUrl: realUrl,
-      client: MockClient((req) async {
-        expect(req.url.path, '/api/patients/u1/records');
-        return http.Response(
-            jsonEncode([
-              {'id': 'r1', 'diagnosis': 'Checkup'}
-            ]),
-            200);
-      }),
-    );
-    final records = await svc.fetchSqlMedicalRecords('u1');
-    expect(records.single['diagnosis'], 'Checkup');
-  });
-
-  test('configured: server error / exception returns [] (never fake data)', () async {
-    final failing = SqlApiService(
-        baseUrl: realUrl, client: MockClient((_) async => http.Response('x', 500)));
-    expect(await failing.fetchSqlMedicalRecords('u1'), isEmpty);
-
-    final throwing = SqlApiService(
-        baseUrl: realUrl, client: MockClient((_) async => throw Exception('down')));
-    expect(await throwing.fetchSqlMedicalRecords('u1'), isEmpty);
-  });
-
-  test('sync returns true on 201 and false on failure', () async {
-    final ok = SqlApiService(
-        baseUrl: realUrl, client: MockClient((_) async => http.Response('', 201)));
-    expect(await ok.syncAppointmentToSql({'a': 1}), isTrue);
-
-    final bad = SqlApiService(
-        baseUrl: realUrl, client: MockClient((_) async => throw Exception('down')));
-    expect(await bad.syncAppointmentToSql({'a': 1}), isFalse);
+      expect(service.fetchSqlMedicalRecords(), throwsException);
+    });
   });
 }

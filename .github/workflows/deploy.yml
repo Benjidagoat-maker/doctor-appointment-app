@@ -1,4 +1,4 @@
-name: CI & Deploy to Firebase Hosting
+name: CI & Deploy to Firebase
 on:
   push:
     branches: [main, master]
@@ -15,7 +15,7 @@ jobs:
           cache: npm
           cache-dependency-path: functions/package-lock.json
       - run: npm --prefix functions ci
-      - run: npm --prefix functions run build
+      - run: npm --prefix functions test
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -23,6 +23,8 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
       - run: flutter test
+      - uses: denoland/setup-deno@v2
+      - run: deno check supabase/functions/api/index.ts
 
   build_and_deploy:
     needs: test
@@ -38,7 +40,21 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build web --release
+      - run: flutter build web --release --dart-define=SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }}
+      - uses: actions/setup-node@v4
+        if: github.event_name == 'push'
+        with:
+          node-version: 22
+      - uses: google-github-actions/auth@v2
+        if: github.event_name == 'push'
+        with:
+          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+      - run: npm --prefix functions ci
+        if: github.event_name == 'push'
+      - run: npx --yes firebase-tools deploy --only functions --project doctor-appointment-2026
+        if: github.event_name == 'push'
+      - run: npx --yes firebase-tools deploy --only firestore:rules,firestore:indexes --project doctor-appointment-2026
+        if: github.event_name == 'push'
       - uses: FirebaseExtended/action-hosting-deploy@v0
         # Secrets are not exposed to PRs from forks; skip deploy there.
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository

@@ -1,6 +1,7 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { auth, db } from "./admin.js";
+import { canBookAsPatient } from "./booking-policy.js";
 
 const REGION = "europe-west1";
 const MINIMUM_LEAD_TIME_MS = 15 * 60_000;
@@ -25,8 +26,8 @@ function requireUser(request: {
   if (request.auth.token.email_verified !== true) {
     throw new HttpsError("permission-denied", "Verify your email before booking.");
   }
-  if (request.auth.token.role !== "user") {
-    throw new HttpsError("permission-denied", "A patient account is required.");
+  if (!canBookAsPatient(request.auth.token.role)) {
+    throw new HttpsError("permission-denied", "A patient or administrator account is required.");
   }
   return request.auth.uid;
 }

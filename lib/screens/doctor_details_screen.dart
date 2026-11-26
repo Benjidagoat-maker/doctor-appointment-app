@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -8,7 +6,6 @@ import '../models/doctor_model.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/realtime_db_service.dart';
-import '../services/sql_api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_utils.dart';
 import '../utils/slot_generator.dart';
@@ -26,7 +23,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final RealtimeDbService _realtimeDb = RealtimeDbService();
-  final SqlApiService _sqlService = SqlApiService();
 
   late DateTime _selectedDate;
   DateTime? _selectedSlot;
@@ -160,7 +156,7 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
     final bookingDateTime = _selectedSlot!;
 
     try {
-      final apptId = await _firestoreService.bookAppointment(
+      await _firestoreService.bookAppointment(
         doctorId: widget.doctor.id,
         date: bookingDateTime,
         reason: _reasonController.text.trim(),
@@ -177,17 +173,6 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       } catch (e) {
         debugPrint('Realtime notification skipped: $e');
       }
-
-      unawaited(
-        _sqlService.syncAppointmentToSql({
-          'id': apptId,
-          'userId': user.uid,
-          'doctorId': widget.doctor.id,
-          'doctorName': widget.doctor.name,
-          'date': bookingDateTime.toIso8601String(),
-          'status': 'confirmed',
-        }),
-      );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
