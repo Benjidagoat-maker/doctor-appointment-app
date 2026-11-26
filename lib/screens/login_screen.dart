@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_utils.dart';
@@ -30,9 +31,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showError(String message, {Color color = AppTheme.dangerRed}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
   Future<void> _login() async {
@@ -81,7 +81,8 @@ class _LoginScreenState extends State<LoginScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text(
-            'Email not verified. Check your inbox or tap to resend.'),
+          'Email not verified. Check your inbox or tap to resend.',
+        ),
         backgroundColor: Colors.orange.shade700,
         action: SnackBarAction(
           label: 'Resend',
@@ -89,15 +90,18 @@ class _LoginScreenState extends State<LoginScreen> {
           onPressed: () async {
             // Temporarily sign in to resend the email, then sign out again.
             try {
-              await FirebaseAuth.instance
-                  .signInWithEmailAndPassword(email: email, password: password);
+              await FirebaseAuth.instance.signInWithEmailAndPassword(
+                email: email,
+                password: password,
+              );
               await _auth.resendVerificationEmail();
               await _auth.signOut();
               if (!mounted) return;
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
-                    builder: (_) => EmailVerificationScreen(email: email)),
+                  builder: (_) => EmailVerificationScreen(email: email),
+                ),
               );
             } catch (e) {
               if (mounted) _showError(describeError(e));
@@ -117,8 +121,10 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await _auth.resetPassword(email);
       if (!mounted) return;
-      _showError('If an account exists for $email, a reset link was sent.',
-          color: AppTheme.successGreen);
+      _showError(
+        'If an account exists for $email, a reset link was sent.',
+        color: AppTheme.successGreen,
+      );
     } catch (e) {
       if (mounted) _showError(describeError(e));
     }
@@ -130,7 +136,10 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 32.0,
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 440),
               child: Column(
@@ -138,16 +147,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryBlue.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.local_hospital_rounded,
-                        size: 48,
-                        color: AppTheme.primaryBlue,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.asset(
+                        'assets/brand/app_icon.png',
+                        width: 64,
+                        height: 64,
                       ),
                     ),
                   ),
@@ -200,7 +205,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                       : Icons.visibility,
                                 ),
                                 onPressed: () => setState(
-                                    () => _obscurePassword = !_obscurePassword),
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
                               ),
                             ),
                           ),
@@ -241,7 +247,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextButton(
                         onPressed: () => Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const SignupScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const SignupScreen(),
+                          ),
                         ),
                         child: const Text(
                           'Register now',

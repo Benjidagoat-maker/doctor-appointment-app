@@ -1,5 +1,6 @@
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
+
 import '../models/doctor_model.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
@@ -10,6 +11,7 @@ import '../utils/app_utils.dart';
 import 'appointments_screen.dart';
 import 'doctor_details_screen.dart';
 import 'login_screen.dart';
+import '../widgets/patient_bottom_navigation.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -27,8 +29,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Created once. Creating the stream inside build() would re-subscribe to
   // Firestore (and flash a spinner) on every keystroke in the search box.
-  late final Stream<List<DoctorModel>> _doctorsStream =
-      _firestoreService.getDoctors();
+  late final Stream<List<DoctorModel>> _doctorsStream = _firestoreService
+      .getDoctors();
 
   String _searchQuery = '';
   String _selectedSpecialty = 'All';
@@ -50,8 +52,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showSqlRecordsSheet(BuildContext context) {
     // One fetch per opening - not one per rebuild while the sheet is dragged.
-    final recordsFuture = _sqlService
-        .fetchSqlMedicalRecords(_authService.currentUser?.uid ?? 'guest');
+    final recordsFuture = _sqlService.fetchSqlMedicalRecords(
+      _authService.currentUser?.uid ?? 'guest',
+    );
 
     showModalBottomSheet(
       context: context,
@@ -87,11 +90,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 16),
                       Row(
                         children: [
-                          const Icon(Icons.storage_rounded,
-                              color: AppTheme.primaryBlue),
+                          const Icon(
+                            Icons.storage_rounded,
+                            color: AppTheme.primaryBlue,
+                          ),
                           const SizedBox(width: 8),
-                          Text('SQL Medical Records',
-                              style: Theme.of(context).textTheme.titleLarge),
+                          Text(
+                            'SQL Medical Records',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
                         ],
                       ),
                       Text(
@@ -103,10 +110,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 16),
                       if (snapshot.connectionState == ConnectionState.waiting)
                         const Expanded(
-                            child: Center(child: CircularProgressIndicator()))
+                          child: Center(child: CircularProgressIndicator()),
+                        )
                       else if (!snapshot.hasData || snapshot.data!.isEmpty)
                         const Expanded(
-                            child: Center(child: Text('No medical records found.')))
+                          child: Center(
+                            child: Text('No medical records found.'),
+                          ),
+                        )
                       else
                         Expanded(
                           child: ListView.separated(
@@ -120,13 +131,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: ListTile(
                                   leading: const CircleAvatar(
                                     backgroundColor: Color(0xFFEFF6FF),
-                                    child: Icon(Icons.folder_shared_outlined,
-                                        color: AppTheme.primaryBlue),
+                                    child: Icon(
+                                      Icons.folder_shared_outlined,
+                                      color: AppTheme.primaryBlue,
+                                    ),
                                   ),
                                   title: Text(
                                     item['diagnosis'] ?? 'Medical Checkup',
                                     style: const TextStyle(
-                                        fontWeight: FontWeight.w600),
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                   subtitle: Text(
                                     '${item['doctor']} • ${item['date']}\n${item['source']}',
@@ -136,8 +150,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                     label: Text(
                                       item['status'] ?? 'Active',
                                       style: const TextStyle(
-                                          fontSize: 11,
-                                          color: AppTheme.successGreen),
+                                        fontSize: 11,
+                                        color: AppTheme.successGreen,
+                                      ),
                                     ),
                                     backgroundColor: AppTheme.successGreen
                                         .withValues(alpha: 0.1),
@@ -164,241 +179,399 @@ class _HomeScreenState extends State<HomeScreen> {
     nav.pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
 
+  void _onPatientNavigation(int index) {
+    if (index == 1) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const AppointmentsScreen()),
+      );
+    } else if (index == 2) {
+      final user = _authService.currentUser;
+      showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheetContext) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppTheme.patientTint,
+                  child: Icon(
+                    Icons.person_outline,
+                    color: AppTheme.patientPrimary,
+                  ),
+                ),
+                title: Text(
+                  user?.displayName?.trim().isNotEmpty == true
+                      ? user!.displayName!
+                      : 'Your profile',
+                ),
+                subtitle: Text(user?.email ?? ''),
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder_shared_outlined),
+                title: const Text('Medical records'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _showSqlRecordsSheet(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.logout_rounded),
+                title: const Text('Sign out'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _signOut();
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final user = _authService.currentUser;
+    final accountName = user?.displayName?.trim().isNotEmpty == true
+        ? user!.displayName!.trim().split(RegExp(r'\s+')).first
+        : user?.email?.split('@').first ?? 'there';
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Find Your Doctor'),
-        actions: [
-          IconButton(
-            tooltip: 'View SQL Connected Records',
-            icon: const Icon(Icons.storage_outlined),
-            onPressed: () => _showSqlRecordsSheet(context),
-          ),
-          IconButton(
-            tooltip: 'My Appointments',
-            icon: const Icon(Icons.calendar_month_outlined),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AppointmentsScreen()),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Sign Out',
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: _signOut,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-            color: Colors.white,
-            child: TextField(
-              controller: _searchController,
-              onChanged: (val) =>
-                  setState(() => _searchQuery = val.trim().toLowerCase()),
-              decoration: InputDecoration(
-                hintText: 'Search by doctor name, specialty or phone...',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        tooltip: 'Clear',
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-              ),
-            ),
-          ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-            child: Row(
-              children: _specialties.map((spec) {
-                final isSelected = _selectedSpecialty == spec;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: FilterChip(
-                    label: Text(spec),
-                    selected: isSelected,
-                    selectedColor: AppTheme.v22ElectricBlue,
-                    backgroundColor: Colors.white,
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : AppTheme.textDark,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      fontSize: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      side: BorderSide(
-                        color: isSelected
-                            ? AppTheme.v22ElectricBlue
-                            : const Color(0xFFE2E8F0),
+      backgroundColor: AppTheme.patientBackground,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 28, 20, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hello, $accountName',
+                        style: const TextStyle(
+                          color: AppTheme.patientMuted,
+                          fontSize: 14,
+                        ),
                       ),
-                    ),
-                    onSelected: (_) => setState(() => _selectedSpecialty = spec),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Find your doctor',
+                        style: TextStyle(
+                          color: AppTheme.patientInk,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _searchController,
+                        onChanged: (value) => setState(
+                          () => _searchQuery = value.trim().toLowerCase(),
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Search doctor or specialty',
+                          hintStyle: const TextStyle(
+                            color: AppTheme.patientMuted,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.search_rounded,
+                            color: AppTheme.patientMuted,
+                          ),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  tooltip: 'Clear search',
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() => _searchQuery = '');
+                                  },
+                                )
+                              : null,
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(
+                              color: AppTheme.patientBorder,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(
+                              color: AppTheme.patientBorder,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(
+                              color: AppTheme.patientPrimary,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: 44,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _specialties.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 8),
+                          itemBuilder: (context, index) {
+                            final specialty = _specialties[index];
+                            final selected = _selectedSpecialty == specialty;
+                            return ChoiceChip(
+                              label: Text(specialty),
+                              selected: selected,
+                              showCheckmark: false,
+                              onSelected: (_) => setState(
+                                () => _selectedSpecialty = specialty,
+                              ),
+                              backgroundColor: Colors.white,
+                              selectedColor: AppTheme.patientPrimary,
+                              side: BorderSide(
+                                color: selected
+                                    ? AppTheme.patientPrimary
+                                    : AppTheme.patientBorder,
+                              ),
+                              labelStyle: TextStyle(
+                                color: selected
+                                    ? Colors.white
+                                    : AppTheme.patientInk,
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                                fontSize: 13,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      const Text(
+                        'Doctors',
+                        style: TextStyle(
+                          color: AppTheme.patientInk,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                );
-              }).toList(),
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder<List<DoctorModel>>(
-              stream: _doctorsStream,
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(describeError(snapshot.error!),
-                          textAlign: TextAlign.center),
-                    ),
-                  );
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final filtered = snapshot.data!.where((doc) {
-                  final matchesQuery = doc.name.toLowerCase().contains(_searchQuery) ||
-                      doc.specialty.toLowerCase().contains(_searchQuery) ||
-                      doc.phone.toLowerCase().contains(_searchQuery);
-                  final matchesSpecialty = _selectedSpecialty == 'All' ||
-                      doc.specialty.toLowerCase() == _selectedSpecialty.toLowerCase();
-                  return matchesQuery && matchesSpecialty;
-                }).toList();
+                ),
+                Expanded(
+                  child: StreamBuilder<List<DoctorModel>>(
+                    stream: _doctorsStream,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(
+                              describeError(snapshot.error!),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        );
+                      }
+                      if (!snapshot.hasData) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: AppTheme.patientPrimary,
+                          ),
+                        );
+                      }
 
-                if (filtered.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.search_off_rounded,
-                            size: 64, color: Colors.grey.shade400),
-                        const SizedBox(height: 12),
-                        Text(
-                          _searchQuery.isEmpty
-                              ? 'No doctors registered yet.'
-                              : 'No matching doctors found.',
-                          style: const TextStyle(color: AppTheme.textMuted),
-                        ),
-                      ],
-                    ),
-                  );
-                }
+                      final filtered = snapshot.data!.where((doctor) {
+                        final matchesQuery =
+                            doctor.name.toLowerCase().contains(_searchQuery) ||
+                            doctor.specialty.toLowerCase().contains(
+                              _searchQuery,
+                            ) ||
+                            doctor.phone.toLowerCase().contains(_searchQuery);
+                        final matchesSpecialty =
+                            _selectedSpecialty == 'All' ||
+                            doctor.specialty.toLowerCase() ==
+                                _selectedSpecialty.toLowerCase();
+                        return matchesQuery && matchesSpecialty;
+                      }).toList();
 
-                return ListView.separated(
-                  padding: const EdgeInsets.all(16.0),
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final doc = filtered[index];
-                    return Card(
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => DoctorDetailsScreen(doctor: doc)),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Row(
+                      if (filtered.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Stack(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 28,
-                                    backgroundColor: AppTheme.primaryBlue
-                                        .withValues(alpha: 0.12),
-                                    child: Text(
-                                      doc.name.isNotEmpty
-                                          ? doc.name[0].toUpperCase()
-                                          : 'D',
-                                      style: const TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppTheme.primaryBlue,
-                                      ),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    bottom: 0,
-                                    right: 0,
-                                    child: _PresenceDot(
-                                      doctorId: doc.id,
-                                      fallbackOnline: doc.available,
-                                      service: _realtimeDb,
-                                    ),
-                                  ),
-                                ],
+                              const Icon(
+                                Icons.search_off_rounded,
+                                size: 48,
+                                color: AppTheme.patientMuted,
                               ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(doc.name,
-                                        style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w700)),
-                                    const SizedBox(height: 4),
-                                    Text(doc.specialty,
-                                        style: const TextStyle(
-                                            fontSize: 13,
-                                            color: AppTheme.primaryBlue,
-                                            fontWeight: FontWeight.w500)),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.phone_outlined,
-                                            size: 14, color: AppTheme.textMuted),
-                                        const SizedBox(width: 4),
-                                        Text(doc.phone,
-                                            style: const TextStyle(
-                                                fontSize: 12,
-                                                color: AppTheme.textMuted)),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: (doc.available
-                                          ? AppTheme.successGreen
-                                          : AppTheme.dangerRed)
-                                      .withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  doc.available ? 'Available' : 'Unavailable',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: doc.available
-                                        ? AppTheme.successGreen
-                                        : AppTheme.dangerRed,
-                                  ),
+                              const SizedBox(height: 12),
+                              Text(
+                                _searchQuery.isEmpty
+                                    ? 'No doctors registered yet.'
+                                    : 'No matching doctors found.',
+                                style: const TextStyle(
+                                  color: AppTheme.patientMuted,
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
+                        );
+                      }
+
+                      return ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final doctor = filtered[index];
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border.all(color: AppTheme.patientBorder),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      DoctorDetailsScreen(doctor: doctor),
+                                ),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Row(
+                                  children: [
+                                    Stack(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 28,
+                                          backgroundColor: AppTheme.patientTint,
+                                          backgroundImage:
+                                              doctor.avatarUrl.isNotEmpty
+                                              ? NetworkImage(doctor.avatarUrl)
+                                              : null,
+                                          child: doctor.avatarUrl.isEmpty
+                                              ? Text(
+                                                  doctor.name.isNotEmpty
+                                                      ? doctor.name[0]
+                                                            .toUpperCase()
+                                                      : 'D',
+                                                  style: const TextStyle(
+                                                    color:
+                                                        AppTheme.patientPrimary,
+                                                    fontSize: 20,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                )
+                                              : null,
+                                        ),
+                                        Positioned(
+                                          bottom: 0,
+                                          right: 0,
+                                          child: _PresenceDot(
+                                            doctorId: doctor.id,
+                                            fallbackOnline: doctor.available,
+                                            service: _realtimeDb,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            doctor.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: AppTheme.patientInk,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            doctor.specialty,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: AppTheme.patientMuted,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    FilledButton(
+                                      onPressed: doctor.active
+                                          ? () => Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    DoctorDetailsScreen(
+                                                      doctor: doctor,
+                                                    ),
+                                              ),
+                                            )
+                                          : null,
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor:
+                                            AppTheme.patientPrimary,
+                                        disabledBackgroundColor:
+                                            AppTheme.patientDisabled,
+                                        foregroundColor: Colors.white,
+                                        disabledForegroundColor:
+                                            AppTheme.patientMuted,
+                                        minimumSize: const Size(68, 44),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                      ),
+                                      child: const Text('Book'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
+      ),
+      bottomNavigationBar: PatientBottomNavigationBar(
+        selectedIndex: 0,
+        onTap: _onPatientNavigation,
       ),
     );
   }
@@ -422,8 +595,8 @@ class _PresenceDot extends StatefulWidget {
 }
 
 class _PresenceDotState extends State<_PresenceDot> {
-  late final Stream<DatabaseEvent> _stream =
-      widget.service.getDoctorLivePresence(widget.doctorId);
+  late final Stream<DatabaseEvent> _stream = widget.service
+      .getDoctorLivePresence(widget.doctorId);
 
   @override
   Widget build(BuildContext context) {
